@@ -1,0 +1,45 @@
+{
+  "name": "familiar",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.2.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "bash scripts/test.sh",
+    "test:unit": "bash scripts/test.sh --unit",
+    "dev:mcp": "node --watch --experimental-strip-types src/mcp/server.ts",
+    "dev:worker": "node --watch --experimental-strip-types src/worker/index.ts",
+    "start": "node dist/main.js",
+    "start:mcp": "node dist/mcp/server.js",
+    "start:worker": "node dist/worker/index.js",
+    "doctor": "node --env-file-if-exists=.env --experimental-strip-types src/ops/doctor.ts",
+    "mint:google": "node --env-file-if-exists=.env --experimental-strip-types src/ops/mint-google-token.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "seed": "node --env-file-if-exists=.env --experimental-strip-types src/ops/seed.ts"
+  },
+  "dependencies": {
+    "@hono/mcp": "^0.3.1",
+    "@hono/node-server": "^2.0.11",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.32",
+    "jose": "^6.2.4",
+    "pg": "^8.22.0",
+    "pg-boss": "^12.26.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.9.0"
+  }
+}

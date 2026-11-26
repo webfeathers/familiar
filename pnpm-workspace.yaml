@@ -1,0 +1,16 @@
+# Single-package repo. `packages:` is required by pnpm 9 whenever this file
+# exists at all — pnpm 11 tolerates its absence, which made the build pass
+# locally and fail on Railway. Declare it explicitly so the file is valid on
+# every version.
+packages:
+  - .
+
+# esbuild is a transitive dep of drizzle-kit. Its postinstall is not needed —
+# `drizzle-kit generate` is verified working without it — so we decline the
+# build script rather than execute one we don't need.
+allowBuilds:
+  esbuild: false
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/sdk@0.115.0'
+  - hono@4.12.32
+  - pg-boss@12.26.3

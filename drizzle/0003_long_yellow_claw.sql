@@ -1,0 +1,1 @@
+ALTER TABLE "entities" ADD COLUMN "reflected_at" timestamp with time zone;

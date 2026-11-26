@@ -1,0 +1,1 @@
+ALTER TABLE "memory_proposals" ADD COLUMN "policy_receipt" jsonb;

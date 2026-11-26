@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+
+# Editor swap/backup files. A .swp of .env contains the secrets you just typed,
+# so these must never be committed.
+*.swp
+*.swo
+*~
+.*.sw[a-p]
+
+# Throwaway scripts from debugging sessions — never commit these.
+.tmp-*
+
+# Curated work-context seed. Holds colleagues, reporting lines and internal
+# vocabulary — employer context that should not be in git, even privately.
+# The .example.ts template IS committed.
+seed/*.ts
+!seed/*.example.ts
