@@ -55,6 +55,10 @@ and accepts exactly one Google account (`ALLOWED_SUBJECT`). Clients get two scop
 
 ## Setup
 
+New to this? [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md) walks through the whole thing step by step:
+Google Cloud, a local or Railway deployment, and connecting Claude. The summary below is the
+short version.
+
 ### 1. Install
 
 ```bash
