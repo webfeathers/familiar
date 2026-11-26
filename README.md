@@ -1,4 +1,8 @@
-# Familiar
+<p align="center">
+  <img src="docs/assets/familiar-avatar.svg" alt="Familiar: a black cat in a witch's hat" width="180">
+</p>
+
+<h1 align="center">Familiar</h1>
 
 Your assistant's familiar: a self-hosted memory and context layer for Claude (and other MCP clients). It keeps a durable
 model of your life, made of the people, projects and facts your sessions teach it plus your
