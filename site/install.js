@@ -1,13 +1,13 @@
-// Familiar install wizard. Runs entirely in the browser: the page's Content
+// Grimalkin install wizard. Runs entirely in the browser: the page's Content
 // Security Policy blocks every network request this script could make, secrets
 // are generated with crypto.getRandomValues, and only non-secret answers are
 // kept (in this browser's localStorage) so a reload doesn't lose your place.
 'use strict'
 
-const STORE = 'familiar-install-v1'
+const STORE = 'grimalkin-install-v1'
 const PLACEHOLDER_SUBJECT = 'replace-after-first-sign-in'
 const LOCAL_URL = 'http://localhost:8080'
-const LOCAL_DB = 'postgres://postgres:familiar@localhost:5432/familiar'
+const LOCAL_DB = 'postgres://postgres:grimalkin@localhost:5432/grimalkin'
 
 const state = {
   where: 'railway', provider: 'google', gaccount: 'workspace',
@@ -24,7 +24,7 @@ let authSecret = makeSecret()
 const OIDC = {
   okta: { issuer: 'https://your-org.okta.com/oauth2/default', help: 'Your Okta domain plus /oauth2/default (or your custom authorization server). Use plain https://your-org.okta.com only if you have no custom one.', sub: 'For Okta it is your user ID, which starts with 00u.', name: 'Okta' },
   entra: { issuer: 'https://login.microsoftonline.com/<tenant-id>/v2.0', help: 'Use your tenant ID (Overview page in Entra), not "common" or "organizations".', sub: 'Entra gives each app a different one, so the refusal page is the easy way to find it.', name: 'Microsoft' },
-  authentik: { issuer: 'https://auth.example.com/application/o/familiar/', help: 'Keep the slash at the end. Authentik shows the exact value on the provider\'s page as "OpenID Configuration Issuer".', sub: 'For Authentik it depends on the provider\'s Subject mode (a hashed user ID by default).', name: 'Authentik' },
+  authentik: { issuer: 'https://auth.example.com/application/o/grimalkin/', help: 'Keep the slash at the end. Authentik shows the exact value on the provider\'s page as "OpenID Configuration Issuer".', sub: 'For Authentik it depends on the provider\'s Subject mode (a hashed user ID by default).', name: 'Authentik' },
   keycloak: { issuer: 'https://keycloak.example.com/realms/your-realm', help: 'Your Keycloak address plus /realms/ and the realm name.', sub: 'For Keycloak it is the user\'s ID in the admin console.', name: 'Keycloak' },
   other: { issuer: 'https://id.example.com', help: 'Exactly as the "issuer" line in <issuer>/.well-known/openid-configuration, including any slash at the end.', sub: 'Your provider may show it in your profile or the admin console.', name: '' },
 }
@@ -119,7 +119,7 @@ const googlePairs = () => [['GOOGLE_CLIENT_ID', state.googleClientId.trim()], ['
 
 function missing () {
   const m = []
-  if (state.where === 'railway' && !baseUrl()) m.push('your Familiar address (step 3)')
+  if (state.where === 'railway' && !baseUrl()) m.push('your Grimalkin address (step 3)')
   if (!state.googleClientId.trim() || !state.googleClientSecret.trim()) m.push('the Google client ID and secret (step 4)')
   if (!mint().token) m.push('the calendar token (step 5)')
   if (!subject()) m.push(state.provider === 'google' ? 'your Google account number (step 5)' : 'your user ID (sign-in step)')
@@ -131,7 +131,7 @@ function missing () {
 
 // ── templates ─────────────────────────────────────────────────────────────
 const T = {
-  cmdClone: () => 'corepack enable\ngit clone https://github.com/webfeathers/familiar.git\ncd familiar\npnpm install',
+  cmdClone: () => 'corepack enable\ngit clone https://github.com/webfeathers/grimalkin.git\ncd grimalkin\npnpm install',
   scopes: () => 'https://www.googleapis.com/auth/calendar.readonly\nhttps://www.googleapis.com/auth/contacts.readonly',
   googleRedirects: () => ['http://localhost:4711/callback', state.provider === 'google' && urlOr('/oauth/google/callback')].filter(Boolean).join('\n'),
   starterEnv: () => env([...googlePairs(), ['AUTH_PROVIDER', state.provider]]),
@@ -151,12 +151,12 @@ const T = {
     ['DATABASE_URL', LOCAL_DB], ['NODE_ENV', 'development'], ['PUBLIC_URL', LOCAL_URL], ['AUTH_SECRET', authSecret],
     ...signInPairs(), ...googlePairs(), ['GOOGLE_REFRESH_TOKEN_WORK', mint().token], ...ownerPairs(),
   ]),
-  cmdDocker: () => 'docker run -d --name familiar-pg --restart unless-stopped \\\n  -e POSTGRES_PASSWORD=familiar -e POSTGRES_DB=familiar \\\n  -p 127.0.0.1:5432:5432 pgvector/pgvector:pg17',
+  cmdDocker: () => 'docker run -d --name grimalkin-pg --restart unless-stopped \\\n  -e POSTGRES_PASSWORD=grimalkin -e POSTGRES_DB=grimalkin \\\n  -p 127.0.0.1:5432:5432 pgvector/pgvector:pg17',
   cmdLocalSetup: () => 'pnpm db:migrate\npnpm doctor\npnpm build',
   cmdLocalRun: () => '# Window 1: the part Claude talks to\nPCL_ROLE=mcp node --env-file=.env dist/main.js\n\n# Window 2: the part that syncs your calendar\nPCL_ROLE=worker node --env-file=.env dist/main.js\n\n# On Windows PowerShell, start each with $env:PCL_ROLE="mcp"; (or "worker";) instead',
   mcpUrl: () => urlOr('/mcp'),
-  cmdClaudeCode: () => `claude mcp add --transport http familiar ${urlOr('/mcp')}`,
-  prefs: () => 'At the start of any substantive session, call `how_i_work` from the familiar connector to load my working preferences. When something is learned about how I like to work, record it with `note_preference`.',
+  cmdClaudeCode: () => `claude mcp add --transport http grimalkin ${urlOr('/mcp')}`,
+  prefs: () => 'At the start of any substantive session, call `how_i_work` from the grimalkin connector to load my working preferences. When something is learned about how I like to work, record it with `note_preference`.',
 }
 
 // ── rendering ─────────────────────────────────────────────────────────────
