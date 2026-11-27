@@ -19,7 +19,7 @@ test('Google stays the default, with the same redirect and token exchange as bef
   const state = u.searchParams.get('state')!
   // Exactly the parameters that shipped before; nothing added.
   assert.deepEqual([...u.searchParams.keys()].sort(), ['client_id', 'redirect_uri', 'response_type', 'scope', 'state'])
-  assert.equal(u.searchParams.get('redirect_uri'), 'https://familiar.example/oauth/google/callback')
+  assert.equal(u.searchParams.get('redirect_uri'), 'https://grimalkin.example/oauth/google/callback')
   assert.equal(u.searchParams.get('scope'), 'openid email profile')
   assert.match(stateCookie!, new RegExp(`^__Host-pcl-state=${state}\\.`))
 
@@ -33,7 +33,7 @@ test('Google stays the default, with the same redirect and token exchange as bef
   assert.equal(codeRow.codeChallenge, 'client-pkce-challenge')
   const body = new URLSearchParams(String(calls[0]!.init!.body))
   assert.deepEqual(Object.fromEntries(body), { code: 'g-code', client_id: 'google-client', client_secret: 'google-secret',
-    redirect_uri: 'https://familiar.example/oauth/google/callback', grant_type: 'authorization_code' })
+    redirect_uri: 'https://grimalkin.example/oauth/google/callback', grant_type: 'authorization_code' })
 })
 
 test('a different Google account is refused and told its own subject', async (t) => {

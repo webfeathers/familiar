@@ -152,7 +152,7 @@ Checks presence and liveness: Postgres reachable + `vector` installed + migratio
 each Google refresh token still exchangeable, and `PUBLIC_URL` well-formed. Values are masked in
 all output.
 
-No model API key appears anywhere in this runbook, on purpose. Nothing in Familiar calls a model,
+No model API key appears anywhere in this runbook, on purpose. Nothing in Grimalkin calls a model,
 so it runs without paid API credits.
 
 ## Hygiene

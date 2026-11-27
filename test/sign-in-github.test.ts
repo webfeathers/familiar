@@ -19,7 +19,7 @@ test('GitHub sign-in sends PKCE, asks for no scopes, and matches the numeric use
   const { u, state, stateCookie } = await start(t)
   assert.equal(u.origin + u.pathname, 'https://github.com/login/oauth/authorize')
   assert.equal(u.searchParams.get('client_id'), 'gh-client')
-  assert.equal(u.searchParams.get('redirect_uri'), 'https://familiar.example/oauth/github/callback')
+  assert.equal(u.searchParams.get('redirect_uri'), 'https://grimalkin.example/oauth/github/callback')
   assert.equal(u.searchParams.get('scope'), null)
   assert.equal(u.searchParams.get('code_challenge_method'), 'S256')
 

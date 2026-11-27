@@ -5,7 +5,7 @@
  * matched, counted and ordered, which a fake store would not reproduce.
  *
  * Run against a MIGRATED scratch database:
- *   TEST_DATABASE_URL=postgresql://user@localhost:5432/familiar_test pnpm test
+ *   TEST_DATABASE_URL=postgresql://user@localhost:5432/grimalkin_test pnpm test
  *
  * Each run writes under its own freshly named owner entity and deletes it
  * afterwards, so it never touches existing rows. As a second guard it refuses
@@ -51,7 +51,7 @@ describe('preference write path', { skip: TEST_URL ? false : 'TEST_DATABASE_URL 
   let selfId = ''
 
   before(async () => {
-    const server = new McpServer({ name: 'familiar-test', version: '0' })
+    const server = new McpServer({ name: 'grimalkin-test', version: '0' })
     registerTools(server, 'context:read context:write')
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
     await server.connect(serverSide)

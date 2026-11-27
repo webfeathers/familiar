@@ -141,7 +141,7 @@ function github(cfg: Extract<SignInConfig, { kind: 'github' }>): SignInProvider 
         headers: {
           accept: 'application/vnd.github+json',
           authorization: `Bearer ${token.access_token}`,
-          'user-agent': 'familiar',
+          'user-agent': 'grimalkin',
           'x-github-api-version': '2022-11-28',
         },
         signal: AbortSignal.timeout(TIMEOUT_MS),

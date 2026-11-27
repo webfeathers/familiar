@@ -39,7 +39,7 @@ import { rememberFact } from '../store/remember.ts'
 import { registerHowIWorkTool } from './how-i-work.ts'
 import { isOwnerEmail } from '../owner.ts'
 
-const calendarCoverage = 'Coverage: the calendars Familiar ingests itself. This is not a complete calendar check.'
+const calendarCoverage = 'Coverage: the calendars Grimalkin ingests itself. This is not a complete calendar check.'
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] })
 
@@ -117,8 +117,8 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
   // The one way a read-only connection asks for write scope: the denial carries
   // the OAuth challenge, and the client runs the consent flow from it.
   server.registerTool('request_memory_write_access', {
-    title: 'Request Familiar memory write permission',
-    description: 'Call only when the owner explicitly asks to enable Familiar memory write access. Requests an OAuth read/write consent flow if this connection lacks context:write, or verifies the current grant. The owner must approve the OAuth consent screen. Does not create or upgrade tokens itself, access the database, or change memory.',
+    title: 'Request Grimalkin memory write permission',
+    description: 'Call only when the owner explicitly asks to enable Grimalkin memory write access. Requests an OAuth read/write consent flow if this connection lacks context:write, or verifies the current grant. The owner must approve the OAuth consent screen. Does not create or upgrade tokens itself, access the database, or change memory.',
     inputSchema: {},
     outputSchema: { reporter: z.string(), grantedScopes: z.array(z.string()), writeScopeGranted: z.literal(true) },
     _meta: oauthToolMeta('write'),
@@ -163,7 +163,7 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
     {
       title: 'Upcoming',
       description:
-        'Calendar view of the next N hours, from the calendars Familiar ingests itself.',
+        'Calendar view of the next N hours, from the calendars Grimalkin ingests itself.',
       inputSchema: {
         hours: intArg(1, 24 * 14).default(24),
       },

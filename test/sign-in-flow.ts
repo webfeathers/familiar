@@ -8,7 +8,7 @@
  */
 import type { TestContext } from 'node:test'
 
-export const ISSUER = 'https://familiar.example'
+export const ISSUER = 'https://grimalkin.example'
 export const callback = 'https://chatgpt.com/connector_platform_oauth_redirect'
 export const clientId = 'https://chatgpt.com/oauth/client.json'
 
@@ -20,7 +20,7 @@ export function baseEnv(extra: Record<string, string>) {
     PUBLIC_URL: ISSUER,
     ALLOWED_SUBJECT: 'owner-subject',
     AUTH_SECRET: 'test-only-secret-not-a-production-credential',
-    DATABASE_URL: 'postgres://fixture:fixture@127.0.0.1:1/familiar_test',
+    DATABASE_URL: 'postgres://fixture:fixture@127.0.0.1:1/grimalkin_test',
     ...extra,
   })
 }

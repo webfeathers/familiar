@@ -1,6 +1,6 @@
-# Self-hosting Familiar
+# Self-hosting Grimalkin
 
-This guide takes you from a fresh clone to Familiar answering in Claude. Plan on about an hour,
+This guide takes you from a fresh clone to Grimalkin answering in Claude. Plan on about an hour,
 most of it in Google Cloud Console. You end up with three pieces:
 
 - **Postgres with pgvector**, which holds your memory.
@@ -24,17 +24,17 @@ deploy it somewhere with HTTPS; [Railway](#option-b-deploy-on-railway) is the pa
 - For the hosted option, a Railway account (or any host that runs Node and terminates HTTPS)
 
 ```bash
-git clone https://github.com/webfeathers/familiar.git
-cd familiar
+git clone https://github.com/webfeathers/grimalkin.git
+cd grimalkin
 pnpm install
 cp .env.example .env
 ```
 
 ## 1. Google Cloud: one OAuth client
 
-Familiar uses Google twice, with one OAuth client:
+Grimalkin uses Google twice, with one OAuth client:
 
-- **Sign-in.** When a client connects, you sign in with Google and Familiar checks that your Google
+- **Sign-in.** When a client connects, you sign in with Google and Grimalkin checks that your Google
   account is the one allowed in. It keeps no Google token from this. (You can sign in with GitHub
   or your own identity provider instead; see [step 1b](#1b-optional-sign-in-with-github-or-an-oidc-provider).
   The worker still uses Google for the calendar either way.)
@@ -126,7 +126,7 @@ identifier, never the owner's.
 
 `ALLOWED_SUBJECT` is your numeric user ID, not your username: usernames can be changed and then
 claimed by someone else. Find it with `gh api user --jq .id`, or at
-`https://api.github.com/users/<your-username>`. Familiar asks GitHub for no scopes; it reads
+`https://api.github.com/users/<your-username>`. Grimalkin asks GitHub for no scopes; it reads
 only your public profile to learn the ID, and keeps no GitHub token.
 
 ### OIDC (Okta, Microsoft Entra ID, Authentik, Keycloak, and others)
@@ -145,7 +145,7 @@ ALLOWED_SUBJECT=<your sub>
 ```
 
 `OIDC_ISSUER` must equal the `issuer` value in `<issuer>/.well-known/openid-configuration`,
-character for character, including any trailing slash. Familiar refuses a discovery document
+character for character, including any trailing slash. Grimalkin refuses a discovery document
 that names a different issuer, and checks every ID token's signature, issuer, audience and
 nonce, and uses PKCE. `pnpm doctor` fetches the document and tells you if the issuer does not
 match.
@@ -159,7 +159,7 @@ match.
 
 Optional settings:
 
-- `OIDC_SCOPES`: scopes to request, default `openid`. Familiar needs only `sub`, so you rarely
+- `OIDC_SCOPES`: scopes to request, default `openid`. Grimalkin needs only `sub`, so you rarely
   need more.
 - `OIDC_TOKEN_AUTH_METHOD`: how the secret is sent to the token endpoint, `client_secret_basic`
   (default) or `client_secret_post`. Match what the app is configured for; Okta apps set to
@@ -174,7 +174,7 @@ by default). When in doubt, use the refusal page.
 | Variable | Required | What it is |
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string |
-| `PUBLIC_URL` | yes (mcp) | Exact origin of the MCP service, e.g. `https://familiar.example.com`. No trailing slash, no path. It becomes the OAuth issuer, so a mismatch breaks discovery |
+| `PUBLIC_URL` | yes (mcp) | Exact origin of the MCP service, e.g. `https://grimalkin.example.com`. No trailing slash, no path. It becomes the OAuth issuer, so a mismatch breaks discovery |
 | `AUTH_SECRET` | yes (mcp) | Signs access tokens and the sign-in state cookie. At least 32 characters: `openssl rand -base64 32` |
 | `ALLOWED_SUBJECT` | yes (mcp) | Your identifier at the sign-in provider: your Google `sub` from `pnpm mint:google` by default, or see step 1b |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | yes | The OAuth client from step 1 (used by the worker even if you sign in another way) |
@@ -192,7 +192,7 @@ by default). When in doubt, use the refusal page.
 | `NODE_ENV` | | `production` on a host |
 | `DATABASE_PUBLIC_URL` | | Only for running migrations or `pnpm doctor` from your laptop against a hosted database that has separate private and public URLs |
 
-There is no model API key. Familiar never calls a model.
+There is no model API key. Grimalkin never calls a model.
 
 ## Option A: run it locally
 
@@ -202,15 +202,15 @@ reach `localhost`, so they need Option B (or an HTTPS tunnel, used the same way 
 Start Postgres with pgvector:
 
 ```bash
-docker run -d --name familiar-pg \
-  -e POSTGRES_PASSWORD=familiar -e POSTGRES_DB=familiar \
+docker run -d --name grimalkin-pg \
+  -e POSTGRES_PASSWORD=grimalkin -e POSTGRES_DB=grimalkin \
   -p 127.0.0.1:5432:5432 pgvector/pgvector:pg17
 ```
 
 In `.env`:
 
 ```
-DATABASE_URL=postgres://postgres:familiar@localhost:5432/familiar
+DATABASE_URL=postgres://postgres:grimalkin@localhost:5432/grimalkin
 PUBLIC_URL=http://localhost:8080
 AUTH_SECRET=<openssl rand -base64 32>
 ```
@@ -231,7 +231,7 @@ pulling the last 90 days of calendar on the first run.
 
 ## Option B: deploy on Railway
 
-1. **Create a project** and add a **PostgreSQL** database. Familiar's first migration runs
+1. **Create a project** and add a **PostgreSQL** database. Grimalkin's first migration runs
    `CREATE EXTENSION IF NOT EXISTS vector`. If that fails with *extension "vector" is not
    available*, set `EXTENSIONS=vector` on the Postgres service and redeploy it.
 2. **Add the MCP service** from your fork or clone of the repo. Railway detects pnpm and runs
@@ -270,18 +270,18 @@ service, and the variables above. `/healthz` reports the commit only on Railway;
 The endpoint is `https://<your-host>/mcp` (or `http://localhost:8080/mcp` locally).
 
 **Claude (web, desktop, mobile):** Settings → Connectors → Add custom connector, and paste the
-URL. Claude opens Familiar's consent page; approve it, sign in with the account you set as
+URL. Claude opens Grimalkin's consent page; approve it, sign in with the account you set as
 `ALLOWED_SUBJECT`, and the tools appear. Connectors added on the web follow you to the apps.
 
 **Claude Code:**
 
 ```bash
-claude mcp add --transport http familiar https://<your-host>/mcp
+claude mcp add --transport http grimalkin https://<your-host>/mcp
 ```
 
 Then run `/mcp` inside Claude Code and choose to authenticate.
 
-**Other MCP clients.** Familiar's OAuth server identifies clients by
+**Other MCP clients.** Grimalkin's OAuth server identifies clients by
 [Client ID Metadata Documents](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/)
 and does not offer dynamic client registration. It sends codes only to Claude's hosted callback,
 ChatGPT's connector callback, and loopback `http://localhost/callback` or
@@ -296,7 +296,7 @@ not remember.
 
 Add something like this to your Claude preferences (Settings → Profile):
 
-> At the start of any substantive session, call `how_i_work` from the familiar connector to load my
+> At the start of any substantive session, call `how_i_work` from the grimalkin connector to load my
 > working preferences. When something is learned about how I like to work, record it with
 > `note_preference`.
 

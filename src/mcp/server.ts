@@ -105,7 +105,7 @@ app.get('/mcp', (c) =>
 )
 
 app.all('/mcp', async (c) => {
-  const server = new McpServer({ name: 'familiar', version: '0.1.0' })
+  const server = new McpServer({ name: 'grimalkin', version: '0.1.0' })
   const { registerTools } = await import('./tools.ts')
   registerTools(server, c.get('scope'), `${c.get('subject')} via ${c.get('clientId')}`,
     wwwAuthenticate('insufficient_scope', 'context:write is required'))

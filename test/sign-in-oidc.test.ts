@@ -5,7 +5,7 @@ import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 import { baseEnv, loadServer, serve, json, clientDoc, approve, returnFrom } from './sign-in-flow.ts'
 
 // Authentik-style issuer, trailing slash and all: it must be compared as written.
-const issuer = 'https://idp.example/application/o/familiar/'
+const issuer = 'https://idp.example/application/o/grimalkin/'
 baseEnv({ AUTH_PROVIDER: 'oidc', OIDC_ISSUER: issuer, OIDC_CLIENT_ID: 'oidc-client',
   OIDC_CLIENT_SECRET: 'oidc secret/+', OIDC_NAME: 'Authentik', ALLOWED_SUBJECT: 'owner-sub' })
 const s = await loadServer()
@@ -17,7 +17,7 @@ const discovery = {
   issuer,
   authorization_endpoint: 'https://idp.example/application/o/authorize/',
   token_endpoint: 'https://idp.example/application/o/token/',
-  jwks_uri: 'https://idp.example/application/o/familiar/jwks/',
+  jwks_uri: 'https://idp.example/application/o/grimalkin/jwks/',
 }
 const sign = (claims: Record<string, unknown>, key = privateKey) =>
   new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: 'k1' }).setIssuedAt().setExpirationTime('5m').sign(key)
@@ -46,7 +46,7 @@ const good = (nonce: string) => ({ iss: issuer, aud: 'oidc-client', sub: 'owner-
 test('OIDC sign-in discovers endpoints, sends PKCE and a nonce, and verifies the ID token', async (t) => {
   const { u, calls, res, codeRow } = await finish(t, good)
   assert.equal(u.origin + u.pathname, discovery.authorization_endpoint)
-  assert.equal(u.searchParams.get('redirect_uri'), 'https://familiar.example/oauth/oidc/callback')
+  assert.equal(u.searchParams.get('redirect_uri'), 'https://grimalkin.example/oauth/oidc/callback')
   assert.equal(u.searchParams.get('scope'), 'openid')
   assert.equal(u.searchParams.get('code_challenge_method'), 'S256')
   assert.equal(res.status, 302)
@@ -83,21 +83,21 @@ test('a discovery document for another issuer is refused before any redirect', a
   const { createProvider } = await import('../src/mcp/providers.ts')
   const { signInConfig } = await import('../src/mcp/config.ts')
   const p = createProvider(signInConfig({ AUTH_PROVIDER: 'oidc', OIDC_ISSUER: 'https://idp2.example',
-    OIDC_CLIENT_ID: 'c', OIDC_CLIENT_SECRET: 's' }, 'https://familiar.example'))
+    OIDC_CLIENT_ID: 'c', OIDC_CLIENT_SECRET: 's' }, 'https://grimalkin.example'))
   serve(t, { 'https://idp2.example/.well-known/openid-configuration': () => json({ ...discovery, issuer: 'https://evil.example' }) })
   await assert.rejects(p.authorizeUrl('state'), /does not equal OIDC_ISSUER/)
 })
 
 test('provider configuration is checked at startup', async () => {
   const { signInConfig } = await import('../src/mcp/config.ts')
-  const cfg = (env: Record<string, string>) => () => signInConfig(env, 'https://familiar.example')
+  const cfg = (env: Record<string, string>) => () => signInConfig(env, 'https://grimalkin.example')
   assert.throws(cfg({ AUTH_PROVIDER: 'facebook' }), /not one of: google, github, oidc/)
   assert.throws(cfg({ AUTH_PROVIDER: 'github', GITHUB_CLIENT_ID: 'x' }), /GITHUB_CLIENT_SECRET is not set/)
   assert.throws(cfg({ AUTH_PROVIDER: 'oidc', OIDC_ISSUER: 'http://idp.example', OIDC_CLIENT_ID: 'c', OIDC_CLIENT_SECRET: 's' }), /https/)
   assert.throws(cfg({ AUTH_PROVIDER: 'oidc', OIDC_ISSUER: 'https://i.example', OIDC_CLIENT_ID: 'c', OIDC_CLIENT_SECRET: 's',
     OIDC_TOKEN_AUTH_METHOD: 'none' }), /OIDC_TOKEN_AUTH_METHOD/)
   const ok = signInConfig({ AUTH_PROVIDER: 'OIDC', OIDC_ISSUER: 'https://i.example', OIDC_CLIENT_ID: 'c',
-    OIDC_CLIENT_SECRET: 's', OIDC_SCOPES: 'email profile' }, 'https://familiar.example')
+    OIDC_CLIENT_SECRET: 's', OIDC_SCOPES: 'email profile' }, 'https://grimalkin.example')
   assert.equal(ok.kind === 'oidc' && ok.scope, 'openid email profile')
   // Google needs nothing beyond the variables it always needed.
   assert.equal(signInConfig({ GOOGLE_CLIENT_ID: 'a', GOOGLE_CLIENT_SECRET: 'b' }, 'https://f.example').kind, 'google')
