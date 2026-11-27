@@ -99,6 +99,8 @@ function ownerPairs () {
   return [
     ['PCL_SELF', state.self.trim()],
     ['PCL_SELF_EMAILS', state.emails.split(',').map(s => s.trim()).filter(Boolean).join(', ')],
+    // The browser already knows the zone the owner lives in; most hosts run in UTC.
+    ['PCL_TIMEZONE', Intl.DateTimeFormat().resolvedOptions().timeZone || ''],
     p && ['PCL_OPERATING_POLICY', p],
     p && ['PCL_OPERATING_POLICY_VERSION', new Date().toISOString().slice(0, 10)],
   ]

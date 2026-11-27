@@ -80,6 +80,8 @@ describe('brief relevance', { skip: !url && 'TEST_DATABASE_URL is not set' }, as
     assert.match(lines[0] ?? '', /Priya Raman .*Q3 renewal/, text)
     assert.ok(lines.filter((l) => l.includes('Stranger')).length <= 3, section)
     assert.match(text, /Renewal review\n\s+with: Priya Raman .* — VP Finance/)
+    // Times read in the owner's zone, with the zone named, not as bare UTC.
+    assert.match(text, /- \w{3} \d{4}-\d\d-\d\d \d\d:\d\d \S+  Renewal review/)
   })
 
   test('a window with nobody on the calendar still briefs, capped to a few guesses', async () => {

@@ -8,9 +8,27 @@
  *   PCL_SELF         the owner's name, as their entity is (or will be) named
  *   PCL_SELF_EMAILS  the owner's own addresses or domains, comma-separated
  *                    (`me@example.com`, `example.com` or `@example.com`)
+ *   PCL_TIMEZONE     the IANA time zone calendar times are shown in
+ *                    (`America/Los_Angeles`); defaults to the server's, UTC on most hosts
  */
 
 const env = (name: string): string | undefined => process.env[name]?.trim() || undefined
+
+/**
+ * Throws on an unknown zone rather than falling back: a typo that silently
+ * showed UTC would be the very bug this setting exists to fix.
+ */
+export function parseTimeZone(raw: string | undefined): string {
+  const zone = raw?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: zone }).resolvedOptions().timeZone
+  } catch {
+    throw new Error(`PCL_TIMEZONE is not a known time zone: "${zone}". Use an IANA name such as America/Los_Angeles.`)
+  }
+}
+
+/** The zone the owner reads calendar times in. */
+export const OWNER_TIMEZONE = parseTimeZone(env('PCL_TIMEZONE'))
 
 /** Whose preferences `how_i_work` and `note_preference` are about. */
 export const OWNER_NAME = env('PCL_SELF') ?? 'Owner'

@@ -38,6 +38,7 @@ import {
 import { rememberFact } from '../store/remember.ts'
 import { registerHowIWorkTool } from './how-i-work.ts'
 import { isOwnerEmail } from '../owner.ts'
+import { formatWhen, type EventStart } from '../when.ts'
 
 const calendarCoverage = 'Coverage: the calendars Grimalkin ingests itself. This is not a complete calendar check.'
 
@@ -200,8 +201,8 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
       return text(
         `${calendarCoverage}\n` + rows
           .map((r) => {
-            const b = r.body as { summary?: string }
-            return `- ${r.occurredAt.toISOString()} — ${b.summary ?? r.kind}`
+            const b = r.body as { summary?: string; start?: EventStart }
+            return `- ${formatWhen(r.occurredAt, b.start)} — ${b.summary ?? r.kind}`
           })
           .join('\n'),
       )
@@ -732,9 +733,10 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
           upcoming.map(async (e) => {
             const b = e.body as {
               summary?: string
+              start?: EventStart
               attendees?: { email?: string; name?: string; self?: boolean }[]
             }
-            const when = e.occurredAt.toISOString().slice(0, 16).replace('T', ' ')
+            const when = formatWhen(e.occurredAt, b.start)
             // Who is this with, and what do we already know about them? This is
             // the whole point of a brief over a calendar: the calendar already
             // tells you the time.
