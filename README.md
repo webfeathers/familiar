@@ -123,6 +123,7 @@ Use the `sub` (a stable number), not your email address.
 | `AUTH_PROVIDER` | Optional: `github` or `oidc` to sign in without Google. See `docs/SELF-HOSTING.md`, step 1b |
 | `PCL_SELF` | Your name, used for the owner entity that preferences attach to. Defaults to `Owner`; set it before first use, since renaming later points preferences at a different entity |
 | `PCL_SELF_EMAILS` | Your own addresses or domains, comma-separated (`me@example.com, example.com`), left out of meeting briefs |
+| `PCL_TIMEZONE` | Your time zone as an IANA name (`America/Los_Angeles`), so calendar times in `brief` and `upcoming` read in it. Defaults to the server's, usually UTC |
 | `PCL_OPERATING_POLICY` | Optional operating policy for `how_i_work`, one rule per line. Unset, a short neutral policy applies |
 | `PCL_OPERATING_POLICY_VERSION` | Optional label for that policy; bump it when the rules change |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | The OAuth client from step 3 |

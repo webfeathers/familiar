@@ -186,6 +186,7 @@ by default). When in doubt, use the refusal page.
 | `PCL_ROLE` | | `mcp` (default) or `worker` |
 | `PCL_SELF` | recommended | Your name, for the entity your preferences attach to. Defaults to `Owner`. Set it before first use: changing it later points preferences at a different entity |
 | `PCL_SELF_EMAILS` | recommended | Your addresses or domains, comma-separated, so meeting briefs leave you out |
+| `PCL_TIMEZONE` | recommended | Your time zone as an IANA name, such as `America/Los_Angeles`, so calendar times read in it. Defaults to the server's, usually UTC |
 | `PCL_OPERATING_POLICY` | | Your own rules for `how_i_work`, one per line. Unset, a short neutral policy applies |
 | `PCL_OPERATING_POLICY_VERSION` | | A label for that policy; change it when the rules change |
 | `PORT` | | Listen port for the MCP service, default `8080`. Most hosts set it for you |
