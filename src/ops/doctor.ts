@@ -38,6 +38,46 @@ for (const key of [...MCP_VARS, ...GOOGLE_VARS]) {
   )
 }
 
+// Sign-in provider (src/mcp/config.ts). Google's client is checked above in any
+// case, because the worker reads the calendar with it whichever provider signs
+// the owner in.
+const provider = (process.env.AUTH_PROVIDER?.trim() || 'google').toLowerCase()
+const PROVIDER_VARS: Record<string, readonly string[]> = {
+  google: [],
+  github: ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET'],
+  oidc: ['OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET'],
+}
+if (!(provider in PROVIDER_VARS)) {
+  record('env AUTH_PROVIDER', 'fail', `"${provider}" — expected google, github or oidc`)
+} else {
+  record('env AUTH_PROVIDER', 'ok', provider === 'google' && !present('AUTH_PROVIDER') ? 'google (default)' : provider)
+  for (const key of PROVIDER_VARS[provider]!) {
+    record(`env ${key}`, present(key) ? 'ok' : 'fail', present(key) ? 'set' : 'missing')
+  }
+}
+
+// An OIDC issuer that does not serve a matching discovery document fails every
+// sign-in, so prove it here rather than at the first connection.
+if (provider === 'oidc' && present('OIDC_ISSUER')) {
+  const issuer = process.env.OIDC_ISSUER!.trim()
+  const url = `${issuer.replace(/\/$/, '')}/.well-known/openid-configuration`
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+    const doc = res.ok ? ((await res.json()) as { issuer?: string }) : {}
+    record(
+      'oidc discovery',
+      doc.issuer === issuer ? 'ok' : 'fail',
+      !res.ok
+        ? `${res.status} from ${url}`
+        : doc.issuer === issuer
+          ? 'issuer matches'
+          : `document names issuer "${doc.issuer}"; set OIDC_ISSUER to exactly that`,
+    )
+  } catch (e) {
+    record('oidc discovery', 'fail', (e as Error).message)
+  }
+}
+
 // The signing secret goes by two names, and src/mcp/tokens.ts accepts either:
 // AUTH_SECRET is the documented one, BETTER_AUTH_SECRET the legacy alias. Check
 // what the code reads, or a setup that follows .env.example fails here while

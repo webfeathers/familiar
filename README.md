@@ -12,7 +12,8 @@ remote MCP endpoint. It works the same from Claude on your phone, your laptop or
 Familiar runs no model. The client does the reasoning with Familiar's tools, and memory changes only
 when a session writes to it. There are no API keys to buy and no per-call model cost.
 
-It is single-tenant by design: one deployment, one owner, gated to one Google account.
+It is single-tenant by design: one deployment, one owner, gated to one account (Google by default,
+or GitHub or any OIDC provider).
 
 ## What it does
 
@@ -42,7 +43,8 @@ Claude Code   ─┘    (MCP tools,      (episodes, entities,     (ingest + rete
 
 One build, two processes, selected by `PCL_ROLE`: `mcp` serves the tools and the OAuth server,
 `worker` ingests. Auth is a small OAuth 2.1 authorization server that delegates sign-in to Google
-and accepts exactly one Google account (`ALLOWED_SUBJECT`). Clients get two scopes:
+(or GitHub, or an OIDC provider such as Okta, Entra ID, Authentik or Keycloak) and accepts exactly
+one account (`ALLOWED_SUBJECT`). Clients get two scopes:
 `context:read` and `context:write`.
 
 ## Requirements
@@ -115,7 +117,8 @@ Use the `sub` (a stable number), not your email address.
 | `DATABASE_URL` | Postgres connection string |
 | `PUBLIC_URL` | Exact public origin of the MCP service, e.g. `https://familiar.example.com`, no trailing slash |
 | `AUTH_SECRET` | Signs issued tokens and the OAuth state cookie. At least 32 random characters; generate with `openssl rand -base64 32` |
-| `ALLOWED_SUBJECT` | The one Google `sub` allowed to sign in |
+| `ALLOWED_SUBJECT` | The one identity allowed to sign in: your Google `sub`, or your ID at the provider set by `AUTH_PROVIDER` |
+| `AUTH_PROVIDER` | Optional: `github` or `oidc` to sign in without Google. See `docs/SELF-HOSTING.md`, step 1b |
 | `PCL_SELF` | Your name, used for the owner entity that preferences attach to. Defaults to `Owner`; set it before first use, since renaming later points preferences at a different entity |
 | `PCL_SELF_EMAILS` | Your own addresses or domains, comma-separated (`me@example.com, example.com`), left out of meeting briefs |
 | `PCL_OPERATING_POLICY` | Optional operating policy for `how_i_work`, one rule per line. Unset, a short neutral policy applies |
@@ -185,7 +188,8 @@ one.
 
 ## Security model
 
-- One owner. Sign-in is delegated to Google and only `ALLOWED_SUBJECT` gets through.
+- One owner. Sign-in is delegated to Google (or GitHub, or your OIDC provider) and only
+  `ALLOWED_SUBJECT` gets through.
 - Google is used to identify you; the MCP service stores no Google token. Only the worker holds a
   refresh token, and only with read-only calendar and contacts scopes.
 - Redirect URIs are an exact allow-list, so the server is not an open redirector.

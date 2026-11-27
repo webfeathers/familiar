@@ -35,7 +35,9 @@ cp .env.example .env
 Familiar uses Google twice, with one OAuth client:
 
 - **Sign-in.** When a client connects, you sign in with Google and Familiar checks that your Google
-  account is the one allowed in. It keeps no Google token from this.
+  account is the one allowed in. It keeps no Google token from this. (You can sign in with GitHub
+  or your own identity provider instead; see [step 1b](#1b-optional-sign-in-with-github-or-an-oidc-provider).
+  The worker still uses Google for the calendar either way.)
 - **Ingestion.** The worker holds one long-lived refresh token with read-only access to your
   calendar and contacts.
 
@@ -92,6 +94,81 @@ quietly, and `pnpm doctor` would report `invalid_grant`.
 
 More detail is in [CREDENTIALS.md](CREDENTIALS.md).
 
+## 1b. Optional: sign in with GitHub or an OIDC provider
+
+By default you sign in with Google, and you can skip this step. To sign in another way, set
+`AUTH_PROVIDER` and that provider's client. There is still exactly one owner: `ALLOWED_SUBJECT`
+becomes your identifier at the provider you chose, and nobody else gets through.
+
+Pick one provider per deployment. Switching later means setting `ALLOWED_SUBJECT` to your
+identifier at the new provider. Every token names the identifier it was issued to, so when that
+changes, connected clients stop working at once and ask you to sign in again.
+
+**Finding your identifier.** For any provider, the easy way is to configure everything, leave
+`ALLOWED_SUBJECT` as a placeholder, and try to connect once. The refusal page names the subject
+you signed in as; put that in `ALLOWED_SUBJECT` and restart. It only ever shows you your own
+identifier, never the owner's.
+
+### GitHub
+
+1. GitHub → Settings → Developer settings → **OAuth Apps** → New OAuth App.
+2. Homepage URL: your `PUBLIC_URL`. Authorization callback URL:
+   `https://<your-host>/oauth/github/callback` (or `http://localhost:8080/oauth/github/callback`
+   locally). GitHub allows one callback per app, so use one app per deployment.
+3. Generate a client secret, then set:
+
+   ```
+   AUTH_PROVIDER=github
+   GITHUB_CLIENT_ID=...
+   GITHUB_CLIENT_SECRET=...
+   ALLOWED_SUBJECT=<your numeric GitHub user id>
+   ```
+
+`ALLOWED_SUBJECT` is your numeric user ID, not your username: usernames can be changed and then
+claimed by someone else. Find it with `gh api user --jq .id`, or at
+`https://api.github.com/users/<your-username>`. Familiar asks GitHub for no scopes; it reads
+only your public profile to learn the ID, and keeps no GitHub token.
+
+### OIDC (Okta, Microsoft Entra ID, Authentik, Keycloak, and others)
+
+Any provider that publishes an OpenID Connect discovery document works. Create a **web**
+application (a confidential client, with a secret) using the authorization-code flow, with the
+redirect URI `https://<your-host>/oauth/oidc/callback`. Then set:
+
+```
+AUTH_PROVIDER=oidc
+OIDC_ISSUER=...            # exactly as the provider writes it; see below
+OIDC_CLIENT_ID=...
+OIDC_CLIENT_SECRET=...
+OIDC_NAME=Okta             # optional: the name shown in messages
+ALLOWED_SUBJECT=<your sub>
+```
+
+`OIDC_ISSUER` must equal the `issuer` value in `<issuer>/.well-known/openid-configuration`,
+character for character, including any trailing slash. Familiar refuses a discovery document
+that names a different issuer, and checks every ID token's signature, issuer, audience and
+nonce, and uses PKCE. `pnpm doctor` fetches the document and tells you if the issuer does not
+match.
+
+| Provider | `OIDC_ISSUER` | Notes |
+|---|---|---|
+| Okta | `https://<org>.okta.com/oauth2/default` (or your custom authorization server) | Use the org server `https://<org>.okta.com` only if you have no custom one |
+| Microsoft Entra ID | `https://login.microsoftonline.com/<tenant-id>/v2.0` | Use your tenant ID, not `common` or `organizations`. Entra's `sub` is different for every app, so find yours from the refusal page |
+| Authentik | `https://<host>/application/o/<app-slug>/` | Keep the trailing slash |
+| Keycloak | `https://<host>/realms/<realm>` | |
+
+Optional settings:
+
+- `OIDC_SCOPES`: scopes to request, default `openid`. Familiar needs only `sub`, so you rarely
+  need more.
+- `OIDC_TOKEN_AUTH_METHOD`: how the secret is sent to the token endpoint, `client_secret_basic`
+  (default) or `client_secret_post`. Match what the app is configured for; Okta apps set to
+  "client secret post" need the second.
+
+`ALLOWED_SUBJECT` is the `sub` claim: for Okta, the user ID (`00u…`); for Keycloak, the user's ID
+in the admin console; for Authentik, it depends on the provider's *Subject mode* (hashed user ID
+by default). When in doubt, use the refusal page.
+
 ## 2. Configuration
 
 | Variable | Required | What it is |
@@ -99,8 +176,12 @@ More detail is in [CREDENTIALS.md](CREDENTIALS.md).
 | `DATABASE_URL` | yes | Postgres connection string |
 | `PUBLIC_URL` | yes (mcp) | Exact origin of the MCP service, e.g. `https://familiar.example.com`. No trailing slash, no path. It becomes the OAuth issuer, so a mismatch breaks discovery |
 | `AUTH_SECRET` | yes (mcp) | Signs access tokens and the sign-in state cookie. At least 32 characters: `openssl rand -base64 32` |
-| `ALLOWED_SUBJECT` | yes (mcp) | Your Google `sub`, from `pnpm mint:google` |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | yes | The OAuth client from step 1 |
+| `ALLOWED_SUBJECT` | yes (mcp) | Your identifier at the sign-in provider: your Google `sub` from `pnpm mint:google` by default, or see step 1b |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | yes | The OAuth client from step 1 (used by the worker even if you sign in another way) |
+| `AUTH_PROVIDER` | | `google` (default), `github` or `oidc`. See step 1b |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | with `github` | The GitHub OAuth App from step 1b |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | with `oidc` | The OIDC application from step 1b |
+| `OIDC_NAME`, `OIDC_SCOPES`, `OIDC_TOKEN_AUTH_METHOD` | | Optional OIDC settings; see step 1b |
 | `GOOGLE_REFRESH_TOKEN_WORK` | yes (worker) | The refresh token from step 1. Without it the service still runs, but nothing syncs |
 | `PCL_ROLE` | | `mcp` (default) or `worker` |
 | `PCL_SELF` | recommended | Your name, for the entity your preferences attach to. Defaults to `Owner`. Set it before first use: changing it later points preferences at a different entity |
@@ -159,9 +240,11 @@ pulling the last 90 days of calendar on the first run.
    - `DATABASE_URL=${{Postgres.DATABASE_URL}}` (a reference to the database's private URL)
    - `AUTH_SECRET`, `ALLOWED_SUBJECT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the `PCL_SELF*`
      values
+   - if you sign in with GitHub or OIDC, `AUTH_PROVIDER` and that provider's variables
 3. **Give it a domain**: Settings → Networking → Generate Domain (or add your own). Set
    `PUBLIC_URL` to that exact `https://` origin, add `https://<that-host>/oauth/google/callback` to
-   your Google OAuth client, and redeploy. A health check path of `/healthz` is a good idea.
+   your Google OAuth client (or `/oauth/github/callback` or `/oauth/oidc/callback` to the app you
+   made in step 1b), and redeploy. A health check path of `/healthz` is a good idea.
 4. **Add the worker** as a second service from the same repo, with no domain. Variables:
    - `PCL_ROLE=worker`, `NODE_ENV=production`, `DATABASE_URL=${{Postgres.DATABASE_URL}}`
    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN_WORK`
@@ -187,7 +270,7 @@ service, and the variables above. `/healthz` reports the commit only on Railway;
 The endpoint is `https://<your-host>/mcp` (or `http://localhost:8080/mcp` locally).
 
 **Claude (web, desktop, mobile):** Settings → Connectors → Add custom connector, and paste the
-URL. Claude opens Familiar's consent page; approve it, sign in with the Google account you set as
+URL. Claude opens Familiar's consent page; approve it, sign in with the account you set as
 `ALLOWED_SUBJECT`, and the tools appear. Connectors added on the web follow you to the apps.
 
 **Claude Code:**
@@ -226,7 +309,11 @@ for a `brief` before your next meeting.
 |---|---|
 | The connector adds but never asks you to sign in | `PUBLIC_URL` does not match the URL you pasted (scheme, host, trailing slash) |
 | Google says `redirect_uri_mismatch` | `https://<your-host>/oauth/google/callback` is missing from the OAuth client, or differs from `PUBLIC_URL` |
-| After Google sign-in: *This account is not authorised for this server* | You signed in with a different Google account than the one `ALLOWED_SUBJECT` names |
+| After Google sign-in: *This account is not authorised for this server* | You signed in with a different Google account than the one `ALLOWED_SUBJECT` names. The page shows the subject you signed in as |
+| GitHub says *The redirect_uri is not associated with this application* | The OAuth App's callback URL is not `https://<your-host>/oauth/github/callback` |
+| *Could not reach …* after approving, with OIDC | Discovery failed. Run `pnpm doctor`: usually `OIDC_ISSUER` differs from the document's `issuer` (a trailing slash, or Entra's `common`) |
+| *… returned an ID token that did not verify* | The ID token's issuer or audience does not match `OIDC_ISSUER` / `OIDC_CLIENT_ID` |
+| OIDC token exchange failed | The secret is wrong, or the app expects the other `OIDC_TOKEN_AUTH_METHOD` |
 | `pnpm doctor` shows `invalid_grant`, and calendar data goes stale | The refresh token was revoked; see [the 7-day trap](#the-7-day-trap) |
 | `pnpm db:migrate` exits 1 with no message | It is trying a private database hostname from your laptop; use the public URL (`railway run --service Postgres …`) |
 | `extension "vector" is not available` | The Postgres image lacks pgvector; use `pgvector/pgvector` locally or `EXTENSIONS=vector` on Railway |

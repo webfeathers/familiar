@@ -142,7 +142,10 @@ const server = http.createServer(async (req, res) => {
   console.log('\n─────────────────────────────────────────────────────────────')
   console.log('Paste these into .env yourself. They are secrets — do not share.\n')
   console.log(`${envVar}=${body.refresh_token}`)
-  if (claims.sub) {
+  // ALLOWED_SUBJECT is the Google `sub` only when Google is the sign-in
+  // provider; with GitHub or OIDC it is that provider's identifier instead.
+  const googleSignIn = (process.env.AUTH_PROVIDER?.trim() || 'google').toLowerCase() === 'google'
+  if (claims.sub && googleSignIn) {
     console.log(`\n# Signed in as ${claims.email ?? '(unknown email)'}`)
     console.log(`ALLOWED_SUBJECT=${claims.sub}`)
   }

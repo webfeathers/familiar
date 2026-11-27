@@ -30,7 +30,10 @@ export const ISSUER = canonicalOrigin(required('PUBLIC_URL'))
 /** `https://host/mcp` — the protected resource, and the token audience. */
 export const RESOURCE = `${ISSUER}/mcp`
 
-/** The single Google `sub` permitted to authorise. The whole "user database". */
+/**
+ * The single identity permitted to authorise, as the sign-in provider names it
+ * (see SIGN_IN below). The whole "user database".
+ */
 export const ALLOWED_SUBJECT = required('ALLOWED_SUBJECT')
 
 export { SCOPES, DEFAULT_SCOPE } from './scopes.ts'
@@ -48,7 +51,7 @@ const HOSTED_REDIRECTS = new Set([
  * port must be ignored for localhost — its published client metadata declares
  * `http://localhost/callback` with no port at all. Everything else must match
  * the hosted callback exactly. We never accept an arbitrary redirect: that is
- * an open redirector and, with a static Google client_id behind us, a
+ * an open redirector and, with a static sign-in client_id behind us, a
  * credential-leak primitive.
  */
 export function isAllowedRedirect(raw: string): boolean {
@@ -69,21 +72,118 @@ export function isAllowedRedirect(raw: string): boolean {
   return isLoopback && u.pathname === '/callback'
 }
 
-/** Google OIDC — used only to authenticate the human, never to store a token. */
-export const GOOGLE = {
-  clientId: required('GOOGLE_CLIENT_ID'),
-  clientSecret: required('GOOGLE_CLIENT_SECRET'),
-  authEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenEndpoint: 'https://oauth2.googleapis.com/token',
-  redirectUri: `${ISSUER}/oauth/google/callback`,
-} as const
+/**
+ * Who signs the owner in. Exactly one provider per deployment, chosen by
+ * AUTH_PROVIDER; ALLOWED_SUBJECT is the owner's identifier AT that provider.
+ * The provider is used only to identify the human, never to store a token.
+ *
+ *   google  (default)  ALLOWED_SUBJECT is the Google `sub`
+ *   github             ALLOWED_SUBJECT is the numeric GitHub user id
+ *   oidc               ALLOWED_SUBJECT is the ID token `sub` at OIDC_ISSUER
+ */
+export type SignInConfig =
+  | {
+      kind: 'google'
+      label: 'Google'
+      clientId: string
+      clientSecret: string
+      authEndpoint: string
+      tokenEndpoint: string
+      redirectUri: string
+    }
+  | {
+      kind: 'github'
+      label: 'GitHub'
+      clientId: string
+      clientSecret: string
+      authEndpoint: string
+      tokenEndpoint: string
+      userEndpoint: string
+      redirectUri: string
+    }
+  | {
+      kind: 'oidc'
+      label: string
+      issuer: string
+      clientId: string
+      clientSecret: string
+      scope: string
+      tokenAuthMethod: 'client_secret_basic' | 'client_secret_post'
+      redirectUri: string
+    }
+
+export const AUTH_PROVIDERS = ['google', 'github', 'oidc'] as const
+
+export function signInConfig(
+  env: Record<string, string | undefined> = process.env,
+  issuer: string = ISSUER,
+): SignInConfig {
+  const need = (name: string) => {
+    const v = env[name]?.trim()
+    if (!v) throw new Error(`${name} is not set`)
+    return v
+  }
+  const kind = (env.AUTH_PROVIDER?.trim() || 'google').toLowerCase()
+  switch (kind) {
+    case 'google':
+      return {
+        kind,
+        label: 'Google',
+        clientId: need('GOOGLE_CLIENT_ID'),
+        clientSecret: need('GOOGLE_CLIENT_SECRET'),
+        authEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+        tokenEndpoint: 'https://oauth2.googleapis.com/token',
+        redirectUri: `${issuer}/oauth/google/callback`,
+      }
+    case 'github':
+      return {
+        kind,
+        label: 'GitHub',
+        clientId: need('GITHUB_CLIENT_ID'),
+        clientSecret: need('GITHUB_CLIENT_SECRET'),
+        authEndpoint: 'https://github.com/login/oauth/authorize',
+        tokenEndpoint: 'https://github.com/login/oauth/access_token',
+        userEndpoint: 'https://api.github.com/user',
+        redirectUri: `${issuer}/oauth/github/callback`,
+      }
+    case 'oidc': {
+      // Compared byte-for-byte with the discovered `issuer` and the ID token's
+      // `iss`, so it is kept exactly as written (Authentik's ends in a slash).
+      const oidcIssuer = need('OIDC_ISSUER')
+      const u = new URL(oidcIssuer)
+      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)
+      if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) {
+        throw new Error('OIDC_ISSUER must be an https URL')
+      }
+      const method = env.OIDC_TOKEN_AUTH_METHOD?.trim() || 'client_secret_basic'
+      if (method !== 'client_secret_basic' && method !== 'client_secret_post') {
+        throw new Error('OIDC_TOKEN_AUTH_METHOD must be client_secret_basic or client_secret_post')
+      }
+      const scope = env.OIDC_SCOPES?.trim() || 'openid'
+      return {
+        kind,
+        label: env.OIDC_NAME?.trim() || 'your identity provider',
+        issuer: oidcIssuer,
+        clientId: need('OIDC_CLIENT_ID'),
+        clientSecret: need('OIDC_CLIENT_SECRET'),
+        scope: scope.split(/\s+/).includes('openid') ? scope : `openid ${scope}`,
+        tokenAuthMethod: method,
+        redirectUri: `${issuer}/oauth/oidc/callback`,
+      }
+    }
+    default:
+      throw new Error(`AUTH_PROVIDER "${kind}" is not one of: ${AUTH_PROVIDERS.join(', ')}`)
+  }
+}
+
+export const SIGN_IN = signInConfig()
 
 export const TTL = {
   /** Authorization codes are single-use and short-lived. */
   codeSeconds: 60,
   accessTokenSeconds: 60 * 60,
   refreshTokenSeconds: 60 * 60 * 24 * 30,
-  /** Google round-trip state. */
+  /** Sign-in round-trip state (consent screen + provider). */
   loginStateSeconds: 10 * 60,
 } as const
 
