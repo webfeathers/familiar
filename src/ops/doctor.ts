@@ -71,6 +71,15 @@ record(
 
 const hasDb = present('DATABASE_URL') || present('DATABASE_PUBLIC_URL')
 
+/** A database on this machine is reachable from it, whatever the variable is called. */
+function isLocalDatabase(url: string): boolean {
+  try {
+    return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
+
 // No URL at all is the documented laptop setup, not a fault: Postgres lives on
 // Railway and `railway run --service Postgres` injects it on demand, so no
 // database credential has to sit in .env. Skip rather than fail, or the health
@@ -82,7 +91,9 @@ record(
   hasDb ? 'ok' : 'skip',
   present('DATABASE_PUBLIC_URL')
     ? 'DATABASE_PUBLIC_URL set (correct for local tooling)'
-    : present('DATABASE_URL')
+    : present('DATABASE_URL') && isLocalDatabase(process.env.DATABASE_URL!)
+      ? 'local database'
+      : present('DATABASE_URL')
       ? 'only the private DATABASE_URL is set — fine inside Railway, unreachable from a laptop'
       : 'not set locally — expected; run `railway run --service Postgres pnpm doctor` to check the database',
 )
