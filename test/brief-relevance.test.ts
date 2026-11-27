@@ -81,4 +81,14 @@ describe('brief relevance', { skip: !url && 'TEST_DATABASE_URL is not set' }, as
     assert.ok(lines.filter((l) => l.includes('Stranger')).length <= 3, section)
     assert.match(text, /Renewal review\n\s+with: Priya Raman .* — VP Finance/)
   })
+
+  test('a window with nobody on the calendar still briefs, capped to a few guesses', async () => {
+    // The meeting is two hours out, so a one-hour window has no attendees.
+    const res = await client.callTool({ name: 'brief', arguments: { hours: 1 } })
+    const text = (res.content as { text: string }[]).map((c) => c.text).join('\n')
+    assert.ok(!res.isError, text)
+    const section = text.split('## Worth a look')[1]?.split('\n## ')[0] ?? ''
+    const lines = section.split('\n').filter((l) => l.startsWith('- '))
+    assert.ok(lines.length > 0 && lines.length <= 3, text)
+  })
 })

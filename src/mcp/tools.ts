@@ -766,9 +766,12 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
       // 2. Anticipations — inferences, flagged as such, never as fact. Those
       //    about the window's attendees come first; the rest of the store gets
       //    a few lines at most, so the section stays about what is coming.
+      // With no attendees in the window this must still be an expression, not
+      // a bare `false`: Postgres rejects a constant in ORDER BY, and an empty
+      // calendar is exactly the day the brief broke on.
       const attendeeFirst = inWindow.size
         ? sql<boolean>`${observations.entityId} in (${sql.join([...inWindow].map((id) => sql`${id}::uuid`), sql`, `)})`
-        : sql<boolean>`false`
+        : sql<boolean>`(${observations.entityId} is null)`
       const anticRows = await db
         .select({
           statement: observations.statement,
