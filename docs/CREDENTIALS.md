@@ -125,6 +125,8 @@ expiry.
 ## 4. Your Google subject — `ALLOWED_SUBJECT`
 
 The single-identity gate: `/authorize` issues a code only when the signed-in Google `sub` matches.
+(With `AUTH_PROVIDER=github` or `oidc` it is your identifier there instead; see SELF-HOSTING.md,
+step 1b.)
 `pnpm mint:google work` prints your `sub` alongside the token. It is a stable numeric string, not
 your email — email is mutable, `sub` is not.
 

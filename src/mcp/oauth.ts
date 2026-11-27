@@ -1,35 +1,38 @@
 /**
- * The authorization server: /authorize → consent → Google → code → /token.
+ * The authorization server: /authorize → consent → sign-in → code → /token.
  *
  * Shape of the flow, and why it is in this order:
  *
  *   1. /authorize validates the request and resolves the client via its Client
  *      ID Metadata Document (CIMD). No DCR, no client database.
- *   2. A FIRST-PARTY consent screen renders BEFORE we ever redirect to Google.
+ *   2. A FIRST-PARTY consent screen renders BEFORE we ever redirect to the
+ *      sign-in provider (Google, GitHub or an OIDC provider; see providers.ts).
  *      This is the confused-deputy mitigation and it is a genuine MUST: we hold
- *      a static client_id at Google while accepting arbitrary MCP clients, which
- *      is precisely the configuration the spec warns about. Without it, any
- *      client that can reach /authorize could ride our Google identity.
+ *      a static client_id at the provider while accepting arbitrary MCP
+ *      clients, which is precisely the configuration the spec warns about.
+ *      Without it, any client that can reach /authorize could ride our
+ *      identity there.
  *      The approval only counts from the browser that was shown the screen:
  *      /authorize sets a cookie, the signed request carries its value, and
  *      /consent requires both. A page elsewhere cannot submit the form for you,
  *      and the screen refuses to be framed.
- *   3. Only after approval do we set the state cookie and bounce to Google.
- *   4. Google returns an ID token; the code is issued ONLY if `sub` matches
- *      ALLOWED_SUBJECT. That comparison is the entire access-control model.
+ *   3. Only after approval do we set the state cookie and bounce to the provider.
+ *   4. The provider tells us who signed in; the code is issued ONLY if that
+ *      subject matches ALLOWED_SUBJECT. That comparison is the entire
+ *      access-control model, and it is the same for every provider.
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { bodyLimit } from 'hono/body-limit'
-import { SignJWT, jwtVerify, decodeJwt } from 'jose'
+import { SignJWT, jwtVerify } from 'jose'
 import { and, eq, isNull, gt } from 'drizzle-orm'
 import { db } from '../store/index.ts'
 import { oauthCodes, oauthConsents } from '../store/schema.ts'
 import {
   ALLOWED_SUBJECT,
-  GOOGLE,
   ISSUER,
+  SIGN_IN,
   TTL,
   isAllowedRedirect,
 } from './config.ts'
@@ -42,6 +45,7 @@ import {
   verifyPkce,
 } from './tokens.ts'
 import { resolveClient } from './client-metadata.ts'
+import { createProvider } from './providers.ts'
 import { normalizeScope, consentDescription } from './scopes.ts'
 import { authorizationServerMetadata, protectedResourceMetadata } from './metadata.ts'
 
@@ -58,13 +62,16 @@ const CONSENT_COOKIE = cookieName('pcl-consent')
 /** Keeps a signed authorize request from being mistaken for any other token. */
 const STATE_AUDIENCE = `${ISSUER}/authorize`
 
+/** The one sign-in provider this deployment is configured for. */
+const provider = createProvider(SIGN_IN)
+
 const sameValue = (a: string, b: string) => {
   const x = Buffer.from(a)
   const y = Buffer.from(b)
   return x.length === y.length && timingSafeEqual(x, y)
 }
 
-/** The authorize request, carried across the consent + Google round trips. */
+/** The authorize request, carried across the consent + sign-in round trips. */
 interface PendingAuth {
   client_id: string
   /** Display name from the client's metadata document, kept for the audit row. */
@@ -171,7 +178,7 @@ oauth.get('/authorize', async (c) => {
   const redirectUri = q.redirect_uri ?? ''
 
   // Never redirect to an unvetted URI — that would be an open redirector, and
-  // with a static Google client behind us, a credential-leak primitive.
+  // with a static sign-in client behind us, a credential-leak primitive.
   if (!redirectUri || !isAllowedRedirect(redirectUri)) {
     return c.text('Invalid redirect_uri', 400)
   }
@@ -303,10 +310,18 @@ oauth.post('/consent', async (c) => {
   }
 
   // The state cookie is set only now — after approval, never before.
-  return c.redirect(await beginGoogleLogin(c, sealed))
+  let target: string
+  try {
+    target = await beginLogin(c, sealed)
+  } catch (e) {
+    console.error('sign-in provider unavailable:', (e as Error).message)
+    deleteCookie(c, STATE_COOKIE, { path: '/', secure: HTTPS })
+    return c.text(`Could not reach ${provider.label} — try again shortly.`, 502)
+  }
+  return c.redirect(target)
 })
 
-async function beginGoogleLogin(c: Context, sealed: string): Promise<string> {
+async function beginLogin(c: Context, sealed: string): Promise<string> {
   const nonce = randomBytes(16).toString('base64url')
   setCookie(c, STATE_COOKIE, `${nonce}.${sealed}`, {
     path: '/',
@@ -315,19 +330,14 @@ async function beginGoogleLogin(c: Context, sealed: string): Promise<string> {
     sameSite: 'Lax',
     maxAge: TTL.loginStateSeconds,
   })
-
-  const u = new URL(GOOGLE.authEndpoint)
-  u.searchParams.set('client_id', GOOGLE.clientId)
-  u.searchParams.set('redirect_uri', GOOGLE.redirectUri)
-  u.searchParams.set('response_type', 'code')
-  u.searchParams.set('scope', 'openid email profile')
-  u.searchParams.set('state', nonce)
-  return u.toString()
+  return provider.authorizeUrl(nonce)
 }
 
-// ── Google callback ──────────────────────────────────────────────────────────
+// ── Sign-in callback ─────────────────────────────────────────────────────────
+// Only the configured provider's path exists: /oauth/google/callback,
+// /oauth/github/callback or /oauth/oidc/callback.
 
-oauth.get('/oauth/google/callback', async (c) => {
+oauth.get(provider.callbackPath, async (c) => {
   const cookie = getCookie(c, STATE_COOKIE)
   // `secure` is REQUIRED on delete too, not just on set: Hono rejects any
   // __Host-prefixed cookie without it, and this throwing here takes out the
@@ -342,30 +352,22 @@ oauth.get('/oauth/google/callback', async (c) => {
   if (c.req.query('state') !== nonce) return c.text('State mismatch.', 400)
 
   const code = c.req.query('code')
-  if (!code) return c.text('No authorization code from Google.', 400)
+  if (!code) return c.text(`No authorization code from ${provider.label}.`, 400)
 
-  const tokenRes = await fetch(GOOGLE.tokenEndpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: GOOGLE.clientId,
-      client_secret: GOOGLE.clientSecret,
-      redirect_uri: GOOGLE.redirectUri,
-      grant_type: 'authorization_code',
-    }),
-  })
-  if (!tokenRes.ok) return c.text('Google token exchange failed.', 502)
-
-  const { id_token } = (await tokenRes.json()) as { id_token?: string }
-  if (!id_token) return c.text('Google returned no id_token.', 502)
-
-  const claims = decodeJwt(id_token)
+  const who = await provider.identify(code, nonce)
+  if (!who.ok) return c.text(who.message, who.status)
 
   // THE access-control decision. One string comparison, and the reason there is
   // no user table anywhere in this system.
-  if (claims.sub !== ALLOWED_SUBJECT) {
-    return c.text('This account is not authorised for this server.', 403)
+  if (!who.subject || !sameValue(who.subject, ALLOWED_SUBJECT)) {
+    // Naming the visitor's OWN identifier back to them reveals nothing about
+    // the owner, and it is how a self-hoster finds the value to configure.
+    return c.text(
+      'This account is not authorised for this server.\n\n' +
+        `You signed in to ${provider.label} as subject ${who.subject || '(none)'}. ` +
+        'If this is the owner, set ALLOWED_SUBJECT to that value.',
+      403,
+    )
   }
 
   // Record the approval only now, with the owner signed in. Written any
@@ -382,7 +384,7 @@ oauth.get('/oauth/google/callback', async (c) => {
     redirectUri: pending.redirect_uri,
     codeChallenge: pending.code_challenge,
     scope: pending.scope,
-    subject: String(claims.sub),
+    subject: who.subject,
     resource: pending.resource ?? null,
     expiresAt: new Date(Date.now() + TTL.codeSeconds * 1000),
   })
