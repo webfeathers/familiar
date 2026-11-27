@@ -39,6 +39,7 @@ import { rememberFact } from '../store/remember.ts'
 import { registerHowIWorkTool } from './how-i-work.ts'
 import { isOwnerEmail } from '../owner.ts'
 import { formatWhen, type EventStart } from '../when.ts'
+import { retireEntity } from '../store/retire.ts'
 
 const calendarCoverage = 'Coverage: the calendars Grimalkin ingests itself. This is not a complete calendar check.'
 
@@ -557,6 +558,31 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
     },
   )
 
+  // ── retire_entity ──────────────────────────────────────────────────────────
+  server.registerTool(
+    'retire_entity',
+    {
+      title: 'Retire an empty entity',
+      description:
+        'Retire an entity nothing is attached to, such as a misread calendar title the brief lists under "Named but never substantiated". ' +
+        'Takes entity_id from what_do_you_know\'s `entity.id`. Refused while the entity has any live fact or link. ' +
+        'Soft: the row is kept, and remembering a fact about it later un-retires it.',
+      inputSchema: {
+        entity_id: z.string().uuid(),
+        reason: z.string().optional(),
+      },
+      _meta: oauthToolMeta('write'),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ entity_id, reason }) => {
+      const denied = writeDenied(scope, writeAuthChallenge)
+      if (denied) return denied
+      const r = await retireEntity(entity_id)
+      if (!r.ok) return { ...text(r.reason), isError: true }
+      return text(`Retired "${r.name}"${reason ? ` (${reason})` : ''}. Remembering a fact about it un-retires it.`)
+    },
+  )
+
   // ── restore ────────────────────────────────────────────────────────────────
   // The undo for forget. Unattended maintenance retires rows in bulk, and
   // re-typing a wrongly retired row by hand loses its id, confidence and
@@ -824,6 +850,7 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
       ) and ${entities.createdAt} < now() - interval '1 day'`
       const suspect = await db
         .select({
+          id: entities.id,
           name: entities.canonicalName,
           summary: entities.summary,
           provisional: entities.provisional,
@@ -836,6 +863,7 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
         .where(
           and(
             isNull(entities.mergedInto),
+            isNull(entities.retiredAt),
             or(
               sql`${entities.provisional} is not null`,
               sql`${hollow} and ${entities.createdAt} >= now() - interval '${sql.raw(String(HOLLOW_RECENT_DAYS))} days'`,
@@ -849,6 +877,7 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
         .from(entities)
         .where(and(
           isNull(entities.mergedInto),
+          isNull(entities.retiredAt),
           isNull(entities.provisional),
           sql`${hollow} and ${entities.createdAt} < now() - interval '${sql.raw(String(HOLLOW_RECENT_DAYS))} days'`,
         ))
@@ -871,10 +900,10 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
             phantom
               .map(
                 (p) =>
-                  `- ${p.name}${p.summary ? ` — ${p.summary.slice(0, 70)}` : ''}`,
+                  `- ${p.name}${p.summary ? ` — ${p.summary.slice(0, 70)}` : ''}  entity_id=${p.id}`,
               )
               .join('\n') +
-            `\n_Nothing has attached to these. Either a misread title, or someone nothing is known about yet._` +
+            `\n_Nothing has attached to these. Either a misread title, or someone nothing is known about yet. retire_entity clears a misread one._` +
             (older ? `\n_${older} older ${older === 1 ? 'one is' : 'ones are'} not listed._` : ''),
         )
       }

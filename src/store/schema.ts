@@ -144,6 +144,12 @@ export const entities = pgTable(
     aliases: text('aliases').array().notNull().default([]),
     /** Entity merges are soft — the losing row survives, pointing at the winner. */
     mergedInto: uuid('merged_into'),
+    /**
+     * Set by retire_entity on a name nothing ever attached to (a misread
+     * calendar title, say). Soft, like a merge: the row survives, and the next
+     * fact written about it clears this again.
+     */
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
     /** Low-confidence provisional entity awaiting correction (judge said ambiguous). */
     provisional: text('provisional'),
     /**

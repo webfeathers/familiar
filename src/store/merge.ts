@@ -92,7 +92,7 @@ export async function mergeEntities(
     // brief's correction queue, which is meant to be a short actionable list.
     await tx
       .update(entities)
-      .set({ aliases, provisional: null })
+      .set({ aliases, provisional: null, retiredAt: null })
       .where(eq(entities.id, winnerId))
     await tx
       .update(entities)

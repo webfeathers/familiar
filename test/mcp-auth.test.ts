@@ -141,9 +141,9 @@ test('real MCP mutation handlers reject read-only access before any database wri
   await server.connect(serverSide); await client.connect(clientSide)
   try {
     const tools = await client.listTools()
-    assert.equal(tools.tools.length, 15)
+    assert.equal(tools.tools.length, 16)
     const writeTools = new Set(['remember', 'forget', 'note_preference', 'request_memory_write_access',
-      'merge_entities', 'update_entity', 'restore', 'retire_link', 'move_facts'])
+      'merge_entities', 'update_entity', 'restore', 'retire_link', 'move_facts', 'retire_entity'])
     for (const tool of tools.tools) {
       assert.deepEqual(tool._meta?.securitySchemes, [{ type: 'oauth2',
         scopes: writeTools.has(tool.name) ? ['context:read', 'context:write'] : ['context:read'] }], tool.name)
@@ -160,6 +160,7 @@ test('real MCP mutation handlers reject read-only access before any database wri
       ['restore', { observation_id: '00000000-0000-4000-8000-000000000000' }],
       ['move_facts', { observation_ids: ['00000000-0000-4000-8000-000000000000'], to: 'fixture' }],
       ['retire_link', { from_entity_id: '00000000-0000-4000-8000-000000000000', to_entity_id: '00000000-0000-4000-8000-000000000001', relation: 'reports_to' }],
+      ['retire_entity', { entity_id: '00000000-0000-4000-8000-000000000000' }],
     ] as const) {
       const result = await client.callTool({ name, arguments: args })
       assert.equal(result.isError, true, name)

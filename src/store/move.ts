@@ -28,6 +28,8 @@ export async function moveFacts(observationIds: string[], targetEntityId: string
     const [target] = await tx.select().from(entities).where(eq(entities.id, targetEntityId)).for('update')
     if (!target) throw new Error('target entity not found')
     if (target.mergedInto) throw new Error(`target entity was merged into ${target.mergedInto.slice(0, 8)}; move to that entity instead`)
+    // Facts arriving on a retired entity un-retire it, as a direct write does.
+    if (target.retiredAt) await tx.update(entities).set({ retiredAt: null }).where(eq(entities.id, targetEntityId))
 
     const rows = await tx
       .select({ id: observations.id, entityId: observations.entityId, invalidatedAt: observations.invalidatedAt })

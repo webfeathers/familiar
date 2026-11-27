@@ -228,4 +228,47 @@ describe('entity admin MCP tools', { skip: !url && 'TEST_DATABASE_URL is not set
     assert.doesNotMatch(JSON.stringify(res.content), /not found/i)
     assert.equal((await reload(e.id)).type, 'person')
   })
+
+  test('retire_entity retires an empty entity and the brief stops listing it', async () => {
+    const name = `Misread ${randomUUID().slice(0, 6)}`
+    const e = await entity({ canonicalName: name, createdAt: new Date(Date.now() - 3 * 86_400_000) })
+    const brief = async () => (await call('brief', { hours: 1 })).text
+    assert.match(await brief(), new RegExp(`${name}.*entity_id=${e.id}`))
+
+    const denied = await reader.client.callTool({ name: 'retire_entity', arguments: { entity_id: e.id } })
+    assert.equal(denied.isError, true)
+    assert.equal((await reload(e.id)).retiredAt, null)
+
+    const { res, text } = await call('retire_entity', { entity_id: e.id, reason: 'misread title' })
+    assert.ok(!res.isError, text)
+    assert.ok((await reload(e.id)).retiredAt)
+    assert.doesNotMatch(await brief(), new RegExp(name))
+
+    const again = await call('retire_entity', { entity_id: e.id })
+    assert.equal(again.res.isError, true)
+    assert.match(again.text, /already retired/)
+  })
+
+  test('retire_entity refuses an entity with a live fact or link', async () => {
+    const withFact = await entity()
+    await observe(withFact.id, 'Works at the customer')
+    const r1 = await call('retire_entity', { entity_id: withFact.id })
+    assert.equal(r1.res.isError, true)
+    assert.match(r1.text, /1 live fact/)
+
+    const a = await entity(); const b = await entity()
+    await db.insert(links).values({ fromEntity: a.id, toEntity: b.id, relation: 'knows', confidence: 0.9, validFrom: new Date() })
+    const r2 = await call('retire_entity', { entity_id: b.id })
+    assert.equal(r2.res.isError, true)
+    assert.match(r2.text, /1 live link/)
+    assert.equal((await reload(b.id)).retiredAt, null)
+  })
+
+  test('remembering a fact about a retired entity un-retires it', async () => {
+    const e = await entity()
+    assert.ok(!(await call('retire_entity', { entity_id: e.id })).res.isError)
+    const { res, text } = await call('remember', { about: e.canonicalName, statement: 'Real after all' })
+    assert.ok(!res.isError, text)
+    assert.equal((await reload(e.id)).retiredAt, null)
+  })
 })
