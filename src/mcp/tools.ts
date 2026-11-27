@@ -116,6 +116,8 @@ function describePreference(r: PreferenceResult): string {
 /** Most inferences a brief lists, and how many of those may be about people outside the window. */
 const BRIEF_ANTICIPATIONS = 10
 const BRIEF_UNRELATED_ANTICIPATIONS = 3
+/** "Named but never substantiated" lists only entities this recent; older ones are counted. */
+const HOLLOW_RECENT_DAYS = 7
 
 export function registerTools(server: McpServer, scope: string, reviewer = 'authenticated-owner', writeAuthChallenge?: string) {
   // ── request_memory_write_access ────────────────────────────────────────────
@@ -807,6 +809,19 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
       // 3. Anything the graph itself is unsure about — surfaced rather than
       //    silently trusted. Two distinct problems, and conflating them is why
       //    a phantom went unnoticed until it was asked about directly.
+      // Hollow entities: named once, never substantiated. A real person
+      // accumulates facts; a misparse ("Carson Sr" from "Carson Sr photos")
+      // stays empty forever, which is why only the past week's are listed.
+      // Listing every one meant the same names opened every brief, with no way
+      // to clear them; older ones get a count instead.
+      const hollow = sql`not exists (
+        select 1 from observations o
+        where o.entity_id = ${entities.id} and o.invalidated_at is null
+      ) and not exists (
+        select 1 from links l
+        where (l.from_entity = ${entities.id} or l.to_entity = ${entities.id})
+          and l.invalidated_at is null
+      ) and ${entities.createdAt} < now() - interval '1 day'`
       const suspect = await db
         .select({
           name: entities.canonicalName,
@@ -823,21 +838,21 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
             isNull(entities.mergedInto),
             or(
               sql`${entities.provisional} is not null`,
-              // Hollow entities: named once, never substantiated. A real person
-              // accumulates facts; a misparse ("Carson Sr" from "Carson Sr
-              // photos") stays empty forever.
-              sql`not exists (
-                select 1 from observations o
-                where o.entity_id = ${entities.id} and o.invalidated_at is null
-              ) and not exists (
-                select 1 from links l
-                where (l.from_entity = ${entities.id} or l.to_entity = ${entities.id})
-                  and l.invalidated_at is null
-              ) and ${entities.createdAt} < now() - interval '1 day'`,
+              sql`${hollow} and ${entities.createdAt} >= now() - interval '${sql.raw(String(HOLLOW_RECENT_DAYS))} days'`,
             ),
           ),
         )
+        .orderBy(desc(entities.createdAt))
         .limit(8)
+      const [olderRow] = await db
+        .select({ older: sql<number>`count(*)::int` })
+        .from(entities)
+        .where(and(
+          isNull(entities.mergedInto),
+          isNull(entities.provisional),
+          sql`${hollow} and ${entities.createdAt} < now() - interval '${sql.raw(String(HOLLOW_RECENT_DAYS))} days'`,
+        ))
+      const older = olderRow?.older ?? 0
 
       // Provisional-AND-empty is the strong tell for something that was never
       // real; provisional-with-facts is a genuine identity question.
@@ -859,7 +874,8 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
                   `- ${p.name}${p.summary ? ` — ${p.summary.slice(0, 70)}` : ''}`,
               )
               .join('\n') +
-            `\n_Nothing has attached to these. Either a misread title, or someone nothing is known about yet._`,
+            `\n_Nothing has attached to these. Either a misread title, or someone nothing is known about yet._` +
+            (older ? `\n_${older} older ${older === 1 ? 'one is' : 'ones are'} not listed._` : ''),
         )
       }
       if (ambiguous.length) {
