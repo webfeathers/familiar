@@ -10,6 +10,8 @@ export type MemoryTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 export async function lockLegacyEntity(tx: MemoryTx, entityId: string) {
   const [entity] = await tx.select().from(entities).where(eq(entities.id, entityId)).for('update')
   if (!entity || entity.mergedInto) throw new Error('Entity is missing or already merged; resolve it again before writing')
+  // A fact about a retired entity means it was real after all: un-retire it.
+  if (entity.retiredAt) await tx.update(entities).set({ retiredAt: null }).where(eq(entities.id, entityId))
   return entity
 }
 

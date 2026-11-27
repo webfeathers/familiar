@@ -19,8 +19,8 @@ The name is an old word for a witch's cat, the kind of familiar that knows its k
 
 ## What it does
 
-- **Remembers.** `remember`, `forget`, `restore`, `update_entity`, `merge_entities`, `move_facts`
-  and `retire_link` keep a graph of entities (people, organisations, projects) with facts and
+- **Remembers.** `remember`, `forget`, `restore`, `update_entity`, `merge_entities`, `move_facts`,
+  `retire_link` and `retire_entity` keep a graph of entities (people, organisations, projects) with facts and
   links, each carrying confidence and provenance. Deletes are soft and reversible.
 - **Recalls.** `get_context` returns what is known about an entity, ranked, optionally narrowed by
   topic. `search` covers stored facts and then raw source material. `what_do_you_know` lists what
