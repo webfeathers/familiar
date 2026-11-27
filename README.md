@@ -198,10 +198,31 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 Your memory lives in your own database. Back it up the way you would any database you care about.
 
+## What it stores about other people
+
+Familiar is about you, but most of what it holds is about the people around you, and they never
+agreed to it. Know what you are collecting before you turn the worker on:
+
+- **Contacts.** Every Google contact, with names, email addresses, phone numbers, organisations and
+  job titles, the relations you set (such as "spouse" or "child"), and your notes on them.
+- **Calendar.** Events from every calendar your Google account can see, from 90 days back to a year
+  ahead: titles, descriptions, locations, and each attendee's name and email address.
+- **What sessions remember.** Facts your Claude sessions store with `remember`, which are often about
+  other people.
+
+All of it stays in your database. Contacts and events you delete in Google are not removed from
+Familiar. Nothing is sent anywhere else, except that whatever a tool returns goes to the MCP client
+you connected, and from there to that client's model provider. Keep the deployment private, and
+think twice before sharing an export or a database backup.
+
 ## Status
 
 Familiar is a personal project shared as is. It runs daily for its author, but there is no support
-commitment and the schema may change. Issues and pull requests are welcome.
+commitment and the schema may change.
+
+Issues are welcome, and I read them. Pull requests are reviewed when I have time, which may be a
+while; for anything larger than a small fix, open an issue first so we can agree on it. Security
+problems go through [SECURITY.md](SECURITY.md), not a public issue.
 
 ## License
 
