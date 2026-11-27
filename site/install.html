@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Nothing typed on this page may leave the browser. connect-src 'none' and
+     form-action 'none' make that a rule the browser enforces, not a promise. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Install Grimalkin</title>
+<meta name="description" content="A step-by-step installer for Grimalkin. Answer a few questions and get your settings and commands, ready to paste. Everything stays in your browser.">
+<link rel="icon" href="assets/grimalkin-avatar.svg" type="image/svg+xml">
+<meta name="theme-color" content="#211a3d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#1a1531; --bg-2:#211a3d; --panel:#2a2250; --line:#3d3470;
+  --ink:#f1ead8; --muted:#c9bfe6; --dim:#9d93c2; --accent:#e8c872; --code:#120e24;
+  --ok:#8fd19e; --warn:#f0a868;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 Jost,system-ui,sans-serif}
+a{color:var(--accent);text-underline-offset:3px}
+code,pre,textarea.mono,input.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:13.5px}
+code{background:var(--code);padding:1px 6px;border-radius:4px;color:var(--ink);overflow-wrap:anywhere}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+header.top{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--line)}
+header.top .brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:600;letter-spacing:2px}
+header.top .brand img{width:30px;height:30px}
+header.top nav a{color:var(--muted);text-decoration:none;margin-left:20px;font-weight:500}
+header.top nav a:hover{color:var(--ink)}
+
+.layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:36px;padding:28px 0 56px}
+.rail{position:sticky;top:16px;align-self:start}
+.rail h1{font-size:22px;margin:0 0 4px;font-weight:600}
+.rail .privacy{font-size:13px;color:var(--dim);margin:0 0 16px}
+.rail ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.rail button{all:unset;cursor:pointer;display:flex;gap:10px;align-items:center;width:100%;padding:6px 8px;border-radius:6px;color:var(--muted);font-size:15px}
+.rail button:hover{background:var(--panel)}
+.rail button .n{flex:none;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--dim)}
+.rail button[aria-current="step"]{background:var(--panel);color:var(--ink)}
+.rail button[aria-current="step"] .n{border-color:var(--accent);color:var(--accent)}
+.rail button.done .n{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.rail .reset{margin-top:14px;font-size:13px;color:var(--dim);background:none;border:0;padding:0 8px;cursor:pointer;text-decoration:underline}
+
+.step{display:none}
+.step.active{display:block}
+.step h2{font-size:28px;font-weight:600;margin:0 0 4px}
+.step > .intro{color:var(--muted);margin:0 0 22px;max-width:68ch}
+.step h3{font-size:18px;font-weight:600;margin:24px 0 8px}
+.step p,.step li{max-width:72ch}
+.step ol.do{padding-left:22px;margin:0 0 12px}
+.step ol.do li{margin:0 0 8px}
+.muted{color:var(--muted)}
+.dim{color:var(--dim);font-size:14px}
+
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:0 0 8px}
+.choice{position:relative;display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px 12px 40px;cursor:pointer}
+.choice input{position:absolute;left:14px;top:16px;accent-color:var(--accent)}
+.choice b{display:block;font-weight:600}
+.choice span{display:block;color:var(--muted);font-size:14px}
+.choice:has(input:checked){border-color:var(--accent)}
+.choice .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.5px;color:var(--bg);background:var(--accent);border-radius:4px;padding:0 6px;margin-left:6px;vertical-align:2px}
+
+.field{margin:0 0 14px;max-width:640px}
+.field label{display:block;font-weight:500;margin:0 0 4px}
+.field .help{display:block;color:var(--dim);font-size:14px;margin:4px 0 0}
+input[type=text],input[type=url],input[type=email],textarea,select{width:100%;background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit}
+textarea{min-height:96px;resize:vertical}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px}
+.msg{font-size:14px;margin:4px 0 0;display:none}
+.msg.show{display:block}
+.msg.bad{color:var(--warn)}
+.msg.good{color:var(--ok)}
+
+.box{position:relative;margin:8px 0 14px}
+.box pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:12px 16px;padding-right:84px;overflow-x:auto;line-height:1.55;margin:0;color:var(--ink);white-space:pre}
+.box .copy{position:absolute;top:8px;right:8px}
+.box .label{font-size:13px;color:var(--dim);margin:0 0 4px}
+.inline-copy{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0}
+
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:8px;font:600 15px Jost,system-ui,sans-serif;text-decoration:none;border:1px solid var(--line);background:none;color:var(--ink);cursor:pointer}
+.btn:hover{background:var(--panel)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.primary:hover{background:#fff}
+.btn.small{padding:4px 10px;font-size:13px;background:var(--panel)}
+.btn.small.copied{border-color:var(--ok);color:var(--ok)}
+.nav{display:flex;justify-content:space-between;gap:12px;margin-top:28px;padding-top:18px;border-top:1px solid var(--line)}
+
+.note{background:var(--bg-2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px;margin:10px 0 14px;max-width:72ch}
+.note.warn{border-left-color:var(--warn)}
+.note p{margin:0}
+.note p + p{margin-top:6px}
+.check{display:flex;gap:10px;align-items:flex-start;margin:14px 0 0;color:var(--muted)}
+.check input{margin-top:5px;accent-color:var(--accent)}
+details{margin:10px 0;max-width:72ch}
+details summary{cursor:pointer;color:var(--muted)}
+table{border-collapse:collapse;font-size:14px;margin:8px 0}
+td,th{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500}
+.missing{color:var(--warn)}
+
+@media (max-width:820px){
+  .wrap{padding:0 16px}
+  .layout{grid-template-columns:minmax(0,1fr);gap:18px;padding-top:16px}
+  .rail{position:static}
+  .rail ol{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
+  .rail button{width:auto;padding:4px}
+  .rail button .t{display:none}
+  .rail button[aria-current="step"] .t{display:inline}
+  .step h2{font-size:24px}
+  header.top nav a.hide-sm{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="assets/grimalkin-avatar.svg" alt="">GRIMALKIN</a>
+    <nav>
+      <a href="./" class="hide-sm">Home</a>
+      <a href="https://github.com/webfeathers/grimalkin/blob/main/docs/SELF-HOSTING.md">Full guide</a>
+      <a href="https://github.com/webfeathers/grimalkin">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="rail">
+      <h1>Install Grimalkin</h1>
+      <p class="privacy">Everything you type stays on this page. It is never sent anywhere, and secrets are not saved. Closing the tab forgets them.</p>
+      <ol id="rail"></ol>
+      <button class="reset" type="button" id="reset">Start over</button>
+    </aside>
+
+    <main id="steps">
+
+<!-- ───────────── 1. Choose ───────────── -->
+<section class="step" data-title="Your setup">
+  <h2>Let's set up Grimalkin</h2>
+  <p class="intro">Grimalkin is a memory for Claude that you run yourself. This guide asks a few questions, tells you exactly where to click, and writes your settings for you. Plan on about an hour, most of it in Google's console. Three quick choices first.</p>
+
+  <h3>Where will it run?</h3>
+  <div class="choices">
+    <label class="choice"><input type="radio" name="where" value="railway" checked><b>On Railway <span class="tag">RECOMMENDED</span></b><span>A hosting service, about $5 a month. Works with Claude on the web, desktop and phone.</span></label>
+    <label class="choice"><input type="radio" name="where" value="local"><b>On my own computer</b><span>Free. Only Claude Code on this computer can reach it, and only while it's on.</span></label>
+  </div>
+
+  <h3>How will you sign in to it?</h3>
+  <p class="dim">Only one account, yours, will ever be let in.</p>
+  <div class="choices">
+    <label class="choice"><input type="radio" name="provider" value="google" checked><b>Google <span class="tag">EASIEST</span></b><span>Uses the same Google setup as your calendar.</span></label>
+    <label class="choice"><input type="radio" name="provider" value="github"><b>GitHub</b><span>Sign in with your GitHub account.</span></label>
+    <label class="choice"><input type="radio" name="provider" value="oidc"><b>Another provider</b><span>Okta, Microsoft Entra ID, Authentik, Keycloak, or any OpenID Connect provider.</span></label>
+  </div>
+
+  <h3>What kind of Google account has your calendar?</h3>
+  <p class="dim">Grimalkin reads your calendar and contacts from Google, whichever way you sign in.</p>
+  <div class="choices">
+    <label class="choice"><input type="radio" name="gaccount" value="workspace" checked><b>Google Workspace</b><span>A work or school account, or your own domain on Google.</span></label>
+    <label class="choice"><input type="radio" name="gaccount" value="gmail"><b>Personal Gmail</b><span>An @gmail.com address. Works, with one weekly chore.</span></label>
+  </div>
+  <div class="note warn" data-show="gaccount=gmail"><p>With a personal Gmail account, Google cuts off Grimalkin's calendar access every 7 days until you re-run one command. This guide shows you how. With a Workspace account that never happens, and you can share a personal calendar into it.</p></div>
+</section>
+
+<!-- ───────────── 2. Tools ───────────── -->
+<section class="step" data-title="Get the code">
+  <h2>Get the code onto your computer</h2>
+  <p class="intro">You need a copy on your computer even if it will run on Railway, because one setup step runs there. These commands go in a terminal: <b>Terminal</b> on a Mac, <b>PowerShell</b> on Windows.</p>
+  <ol class="do">
+    <li>Install <a href="https://nodejs.org/en/download" target="_blank" rel="noopener">Node.js</a>, version 22 or newer. The installer from that page is fine.</li>
+    <li>Install <a href="https://git-scm.com/downloads" target="_blank" rel="noopener">Git</a> if you don't have it. On a Mac, typing <code>git</code> in Terminal offers to install it.</li>
+    <li data-show="where=local">Install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener">Docker Desktop</a> and start it. It runs the database.</li>
+    <li>Run these, one line at a time:</li>
+  </ol>
+  <div class="box" data-tpl="cmdClone"></div>
+  <p class="dim">The last line takes a minute. When it finishes you have a folder called <code>grimalkin</code>. Leave the terminal open; you'll be back in it.</p>
+  <details><summary>Something went wrong</summary>
+    <p class="dim"><code>corepack: command not found</code> or <code>node: command not found</code> means Node.js isn't installed, or the terminal was open before you installed it. Close the terminal, open a new one, and run <code>node --version</code>. It should say v22 or higher.</p>
+  </details>
+  <label class="check"><input type="checkbox" data-k="doneClone"> I have the grimalkin folder and <code>pnpm install</code> finished.</label>
+</section>
+
+<!-- ───────────── 3. Address ───────────── -->
+<section class="step" data-title="Your address">
+  <h2 data-show="where=railway">Create your Railway project</h2>
+  <h2 data-show="where=local">Your address</h2>
+
+  <div data-show="where=railway">
+    <p class="intro">Grimalkin needs a web address that Claude can reach. You'll get one from Railway now and come back to set the rest of Railway up at the end.</p>
+    <ol class="do">
+      <li>On GitHub, open <a href="https://github.com/webfeathers/grimalkin" target="_blank" rel="noopener">webfeathers/grimalkin</a> and press <b>Fork</b>, then <b>Create fork</b>. That gives you your own copy for Railway to build from.</li>
+      <li>Sign in at <a href="https://railway.com" target="_blank" rel="noopener">railway.com</a> and press <b>New Project</b> → <b>Deploy from GitHub repo</b>, and pick your fork. Allow Railway access to it if asked.</li>
+      <li>The first build will fail or crash. That's expected: it has no settings yet.</li>
+      <li>Click the new service, then <b>Settings</b> → <b>Networking</b> → <b>Generate Domain</b>. Copy the address it shows (something like <code>grimalkin-production-1234.up.railway.app</code>) and paste it below.</li>
+    </ol>
+    <div class="field">
+      <label for="publicUrl">Your Grimalkin address</label>
+      <input type="url" id="publicUrl" data-k="publicUrl" class="mono" placeholder="https://grimalkin-production-1234.up.railway.app" autocomplete="off" spellcheck="false">
+      <span class="help">You can use your own domain instead, if you add it in the same Networking panel.</span>
+      <p class="msg" id="publicUrlMsg"></p>
+    </div>
+  </div>
+
+  <div data-show="where=local">
+    <p class="intro">On your own computer, Grimalkin's address is always the same, so there's nothing to do here.</p>
+    <div class="box"><pre>http://localhost:8080</pre></div>
+    <p class="dim">Claude on the web or phone can't reach this address. If you later want that, run this guide again and choose Railway.</p>
+  </div>
+</section>
+
+<!-- ───────────── 4. Google Cloud ───────────── -->
+<section class="step" data-title="Google setup">
+  <h2>Set up Google</h2>
+  <p class="intro">This lets Grimalkin read your calendar and contacts<span data-show="provider=google">, and lets you sign in with Google</span>. It is the longest step. Sign in to Google with the account that has your calendar.</p>
+  <ol class="do">
+    <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console: New project</a>. Name it <b>Grimalkin</b> and press <b>Create</b>. Make sure the new project is selected at the top of the page.</li>
+    <li>Turn on two APIs. Open each link and press <b>Enable</b>: <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">Google Calendar API</a> and <a href="https://console.cloud.google.com/apis/library/people.googleapis.com" target="_blank" rel="noopener">People API</a>.</li>
+    <li>Open <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">Google Auth Platform</a> (older consoles call it <i>OAuth consent screen</i>) and press <b>Get started</b>. App name: <b>Grimalkin</b>. Support and contact email: yours.
+      <span data-show="gaccount=workspace">For <b>Audience</b>, choose <b>Internal</b>.</span>
+      <span data-show="gaccount=gmail">For <b>Audience</b>, choose <b>External</b>. Then under <b>Audience</b> → <b>Test users</b>, add your own Gmail address.</span>
+    </li>
+    <li>Under <b>Data Access</b> → <b>Add or remove scopes</b>, tick <code>openid</code>, <code>.../auth/userinfo.email</code>, <code>.../auth/userinfo.profile</code>, and paste these two into <b>Manually add scopes</b>, then <b>Update</b> and <b>Save</b>:
+      <div class="box" data-tpl="scopes"></div>
+    </li>
+    <li>Under <b>Clients</b> → <b>Create client</b>, choose <b>Web application</b>, name it <b>Grimalkin</b>, and add each of these under <b>Authorized redirect URIs</b>:
+      <div class="box" data-tpl="googleRedirects"></div>
+      Press <b>Create</b>.</li>
+    <li>Google shows a <b>Client ID</b> and <b>Client secret</b>. Paste both here. (If the window closed, open the client again; the secret is under <b>Client secrets</b>.)</li>
+  </ol>
+  <div class="field">
+    <label for="gid">Client ID</label>
+    <input type="text" id="gid" data-k="googleClientId" class="mono" placeholder="1234567890-abc123.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+    <p class="msg" id="gidMsg"></p>
+  </div>
+  <div class="field">
+    <label for="gsecret">Client secret</label>
+    <input type="text" id="gsecret" data-k="googleClientSecret" data-secret class="mono" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false">
+  </div>
+</section>
+
+<!-- ───────────── 5. Calendar token ───────────── -->
+<section class="step" data-title="Connect calendar">
+  <h2>Connect your calendar</h2>
+  <p class="intro">Now one command on your computer asks Google for long-term permission to read your calendar<span data-show="provider=google">, and finds your Google account number so only you can sign in</span>.</p>
+  <ol class="do">
+    <li>Save this starter settings file into your <code>grimalkin</code> folder. It must be named <code>.env</code>, with the dot.
+      <div class="inline-copy"><button class="btn small" type="button" data-download="starter">Download .env</button> <span class="dim">or copy it:</span></div>
+      <div class="box" data-tpl="starterEnv"></div>
+      <p class="dim">Your browser may save it as <code>env</code> or <code>.env.txt</code>. Rename it to <code>.env</code>. On a Mac, press <b>Cmd + Shift + .</b> in Finder to see files that start with a dot.</p>
+    </li>
+    <li>In the terminal, inside the grimalkin folder, run:
+      <div class="box" data-tpl="cmdMint"></div>
+    </li>
+    <li>It prints a long link. Open it, sign in with the account that has your calendar, and allow access. <span data-show="gaccount=gmail">Google will warn that the app isn't verified: press <b>Continue</b>. It's your own app.</span></li>
+    <li>Back in the terminal, it prints a block of lines between two rules. Copy that whole block and paste it here:</li>
+  </ol>
+  <div class="field">
+    <label for="mintOut">What the terminal printed</label>
+    <textarea id="mintOut" data-k="mintOutput" data-secret class="mono" placeholder="GOOGLE_REFRESH_TOKEN_WORK=1//0g…&#10;# Signed in as you@example.com&#10;ALLOWED_SUBJECT=1098…" spellcheck="false"></textarea>
+    <p class="msg" id="mintMsg"></p>
+  </div>
+  <details><summary>It said no refresh token was returned</summary>
+    <p class="dim">Google only hands one out the first time. Open <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">your Google account's third-party access page</a>, remove <b>Grimalkin</b>, and run the command again.</p>
+  </details>
+  <details><summary>Google says redirect_uri_mismatch</summary>
+    <p class="dim"><code>http://localhost:4711/callback</code> is missing from the client's redirect URIs in step 4, or has a typo.</p>
+  </details>
+</section>
+
+<!-- ───────────── 6. Sign-in (GitHub / OIDC) ───────────── -->
+<section class="step" data-title="Sign-in" data-when="provider!=google">
+  <div data-show="provider=github">
+    <h2>Set up GitHub sign-in</h2>
+    <p class="intro">You'll make a small GitHub app that lets Grimalkin check it's really you.</p>
+    <ol class="do">
+      <li>Open <a href="https://github.com/settings/applications/new" target="_blank" rel="noopener">GitHub: Register a new OAuth app</a>.</li>
+      <li>Application name: <b>Grimalkin</b>. Homepage URL and Authorization callback URL:
+        <div class="box" data-tpl="githubUrls"></div>
+        Leave <b>Enable Device Flow</b> off, and press <b>Register application</b>.</li>
+      <li>Copy the <b>Client ID</b>. Press <b>Generate a new client secret</b> and copy that too.</li>
+    </ol>
+    <div class="field"><label for="ghid">Client ID</label><input type="text" id="ghid" data-k="githubClientId" class="mono" placeholder="Ov23li…" autocomplete="off" spellcheck="false"></div>
+    <div class="field"><label for="ghsecret">Client secret</label><input type="text" id="ghsecret" data-k="githubClientSecret" data-secret class="mono" autocomplete="off" spellcheck="false"></div>
+    <h3>Your GitHub user number</h3>
+    <p class="muted">Grimalkin lets in one GitHub account, by its number rather than its name, because names can change hands. Type your username to get a link that shows it, then copy the <code>"id"</code> number from that page.</p>
+    <div class="field"><label for="ghlogin">GitHub username</label><input type="text" id="ghlogin" data-k="githubLogin" class="mono" placeholder="octocat" autocomplete="off" spellcheck="false"><p class="msg" id="ghLink"></p></div>
+    <div class="field"><label for="ghuid">GitHub user number</label><input type="text" id="ghuid" data-k="githubUserId" class="mono" inputmode="numeric" placeholder="583231" autocomplete="off"><p class="msg" id="ghuidMsg"></p></div>
+  </div>
+
+  <div data-show="provider=oidc">
+    <h2>Set up your sign-in provider</h2>
+    <p class="intro">In your provider's admin console, create a <b>web</b> application (one with a client secret) using the authorization code flow.</p>
+    <div class="field">
+      <label for="oidcPreset">Which provider?</label>
+      <select id="oidcPreset" data-k="oidcPreset">
+        <option value="okta">Okta</option>
+        <option value="entra">Microsoft Entra ID</option>
+        <option value="authentik">Authentik</option>
+        <option value="keycloak">Keycloak</option>
+        <option value="other">Something else</option>
+      </select>
+    </div>
+    <p class="muted">Use this as the app's sign-in redirect URI:</p>
+    <div class="box" data-tpl="oidcRedirect"></div>
+    <div class="field">
+      <label for="oidcIssuer">Issuer URL</label>
+      <input type="url" id="oidcIssuer" data-k="oidcIssuer" class="mono" autocomplete="off" spellcheck="false">
+      <span class="help" id="oidcIssuerHelp"></span>
+      <p class="msg" id="oidcIssuerMsg"></p>
+    </div>
+    <div class="field"><label for="oidcId">Client ID</label><input type="text" id="oidcId" data-k="oidcClientId" class="mono" autocomplete="off" spellcheck="false"></div>
+    <div class="field"><label for="oidcSecret">Client secret</label><input type="text" id="oidcSecret" data-k="oidcClientSecret" data-secret class="mono" autocomplete="off" spellcheck="false"></div>
+    <div class="field">
+      <label for="oidcAuth">How the app sends its secret</label>
+      <select id="oidcAuth" data-k="oidcAuthMethod">
+        <option value="">Client secret basic (the usual default)</option>
+        <option value="client_secret_post">Client secret post</option>
+      </select>
+      <span class="help">Match what the app is set to. Okta apps set to "client secret post" need the second.</span>
+    </div>
+    <h3>Your user ID at the provider</h3>
+    <p class="muted">This is the <code>sub</code> value your provider gives your account. <span id="oidcSubHelp"></span></p>
+    <label class="check"><input type="checkbox" data-k="oidcSubLater"> I don't know it. I'll sign in once, read it off the refusal page, and add it then.</label>
+    <div class="field" data-show="oidcSubLater=false" style="margin-top:12px"><label for="oidcSub">User ID (sub)</label><input type="text" id="oidcSub" data-k="oidcSub" class="mono" autocomplete="off" spellcheck="false"></div>
+  </div>
+</section>
+
+<!-- ───────────── 7. About you ───────────── -->
+<section class="step" data-title="About you">
+  <h2>About you</h2>
+  <p class="intro">Grimalkin keeps your preferences under your name, and leaves you out when it tells you who a meeting is with.</p>
+  <div class="field">
+    <label for="self">Your name</label>
+    <input type="text" id="self" data-k="self" placeholder="Alex Rivera" autocomplete="name">
+    <span class="help">Pick it now and keep it. Changing it later starts your preferences over.</span>
+  </div>
+  <div class="field">
+    <label for="emails">Your email addresses</label>
+    <input type="text" id="emails" data-k="emails" placeholder="alex@example.com, alex.rivera@gmail.com" autocomplete="email">
+    <span class="help">Separate them with commas. A whole domain like <code>example.com</code> works too.</span>
+  </div>
+  <details><summary>Optional: your own working rules</summary>
+    <p class="dim">Claude reads these at the start of a session through <code>how_i_work</code>. One rule per line. Leave it empty for a short sensible default.</p>
+    <div class="field"><textarea id="policy" data-k="policy" placeholder="Ask before sending anything outside the project.&#10;Keep replies short."></textarea></div>
+  </details>
+
+  <h3>Your secret key</h3>
+  <p class="muted">Grimalkin signs its sign-in tickets with this key. It was made in your browser just now and is long and random, as it must be. You don't need to keep a copy: it goes into your settings in the next step.</p>
+  <div class="inline-copy"><code id="secretView"></code> <button class="btn small" type="button" id="regen">Make a new one</button></div>
+</section>
+
+<!-- ───────────── 8. Settings ───────────── -->
+<section class="step" data-title="Turn it on">
+  <div data-show="where=railway">
+    <h2>Finish Railway and turn it on</h2>
+    <p class="intro">Your settings are ready. Railway calls them <b>Variables</b>. Each block below goes into one service through its <b>Raw Editor</b>.</p>
+    <div class="note warn" id="missingNote"><p></p></div>
+    <ol class="do">
+      <li>In your Railway project, press <b>Create</b> (or <b>+ New</b>) → <b>Database</b> → <b>PostgreSQL</b>. Wait for it to turn green. If its name isn't <b>Postgres</b>, rename it to that (Settings, top of the page), so the settings below can find it.</li>
+      <li>Click the service you made earlier from your fork. Rename it to <b>grimalkin-mcp</b>. Open <b>Variables</b> → <b>Raw Editor</b>, replace everything with this block, and press <b>Update Variables</b>:
+        <div class="box" data-tpl="railwayMcp"></div>
+      </li>
+      <li>In the same service, <b>Settings</b> → <b>Deploy</b> → <b>Healthcheck Path</b>: <code>/healthz</code>.</li>
+      <li>Add the second service: <b>Create</b> → <b>GitHub Repo</b> → your fork again. Rename it to <b>grimalkin-worker</b>. Don't give it a domain. Its <b>Raw Editor</b> gets this block:
+        <div class="box" data-tpl="railwayWorker"></div>
+      </li>
+      <li>Press <b>Deploy</b> on the banner Railway shows. In a few minutes both services turn green. The worker sets up the database the first time it starts.</li>
+      <li>Check it: open <a id="healthLink" href="#" target="_blank" rel="noopener"></a>. You should see <code>"ok":true</code> and <code>"migrations":"current"</code>. If migrations says anything else, give the worker another minute and reload.</li>
+    </ol>
+    <details><summary>Something went wrong</summary>
+      <table>
+        <tr><th>What you see</th><th>What to do</th></tr>
+        <tr><td><code>extension "vector" is not available</code> in the worker's logs</td><td>Click the Postgres service → Variables, add <code>EXTENSIONS</code> = <code>vector</code>, and redeploy it, then the worker.</td></tr>
+        <tr><td><code>AUTH_SECRET</code> or <code>ALLOWED_SUBJECT is not set</code></td><td>A block didn't save. Open that service's Raw Editor, paste it again, and press Update Variables.</td></tr>
+        <tr><td><code>ENOTFOUND</code> or a database connection error</td><td>The database isn't named <b>Postgres</b>. Rename it, or change <code>Postgres</code> in <code>DATABASE_URL</code> to its name.</td></tr>
+      </table>
+    </details>
+  </div>
+
+  <div data-show="where=local">
+    <h2>Turn it on</h2>
+    <p class="intro">Your full settings file is ready. It replaces the starter one.</p>
+    <div class="note warn" id="missingNoteLocal"><p></p></div>
+    <ol class="do">
+      <li>Save this as <code>.env</code> in your grimalkin folder, replacing the old one.
+        <div class="inline-copy"><button class="btn small" type="button" data-download="full">Download .env</button></div>
+        <div class="box" data-tpl="localEnv"></div>
+      </li>
+      <li>Make sure Docker Desktop is running, then start the database (once):
+        <div class="box" data-tpl="cmdDocker"></div>
+      </li>
+      <li>Set up the database, check your settings, and build:
+        <div class="box" data-tpl="cmdLocalSetup"></div>
+        <p class="dim"><code>pnpm doctor</code> checks every setting and prints a line for each. It never prints your secrets. Fix anything it marks before going on.</p>
+      </li>
+      <li>Start Grimalkin. It's two programs, so use two terminal windows, both in the grimalkin folder:
+        <div class="box" data-tpl="cmdLocalRun"></div>
+      </li>
+      <li>Check it: open <a href="http://localhost:8080/healthz" target="_blank" rel="noopener">http://localhost:8080/healthz</a>. You should see <code>"ok":true</code> and <code>"migrations":"current"</code>.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ───────────── 9. Connect ───────────── -->
+<section class="step" data-title="Connect Claude">
+  <h2>Connect Claude</h2>
+  <p class="intro">Last step. Your Grimalkin address for Claude is:</p>
+  <div class="box" data-tpl="mcpUrl"></div>
+
+  <div data-show="where=railway">
+    <h3>Claude on the web, desktop and phone</h3>
+    <ol class="do">
+      <li>Open <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">Claude: Settings → Connectors</a> and press <b>Add custom connector</b>.</li>
+      <li>Name: <b>Grimalkin</b>. URL: the address above. Press <b>Add</b>, then <b>Connect</b>.</li>
+      <li>Approve Grimalkin's page, then sign in with <span id="signInWho"></span>. The tools appear, and follow you to the Claude apps.</li>
+    </ol>
+  </div>
+
+  <h3>Claude Code</h3>
+  <div class="box" data-tpl="cmdClaudeCode"></div>
+  <p class="dim">Then type <code>/mcp</code> inside Claude Code, pick grimalkin, and choose to authenticate.</p>
+
+  <h3>Tell Claude to use it</h3>
+  <p class="muted">Paste this into <a href="https://claude.ai/settings/general" target="_blank" rel="noopener">Settings → General → personal preferences</a>:</p>
+  <div class="box" data-tpl="prefs"></div>
+  <p class="muted">Then start teaching it. Ask Claude to remember the people and projects you work with, and ask for a brief before your next meeting.</p>
+
+  <div data-show="oidcSubLater=true">
+    <div class="note warn"><p><b>One thing left.</b> Your first sign-in will be refused, on purpose. The refusal page shows your user ID. Put it in <code>ALLOWED_SUBJECT</code> <span data-show="where=railway">in both Railway services' Variables</span><span data-show="where=local">in your .env, then restart the first terminal</span>, and connect again.</p></div>
+  </div>
+
+  <details><summary>Something went wrong</summary>
+    <table>
+      <tr><th>What you see</th><th>What to do</th></tr>
+      <tr><td>The connector adds but never asks you to sign in</td><td><code>PUBLIC_URL</code> doesn't match the address you pasted. Check for a typo, or a slash at the end.</td></tr>
+      <tr><td>Google says <code>redirect_uri_mismatch</code></td><td>The sign-in address from step 4 is missing from your Google client, or has a typo.</td></tr>
+      <tr><td><i>This account is not authorised for this server</i></td><td>You signed in with a different account than the one you set up. The page shows which one you used.</td></tr>
+      <tr><td>Calendar stopped updating after a week</td><td>That's Google's 7-day limit for Gmail accounts. Run <code>pnpm mint:google work</code> again and replace <code>GOOGLE_REFRESH_TOKEN_WORK</code><span data-show="where=railway"> in the worker's Variables</span>.</td></tr>
+    </table>
+    <p class="dim">More in the <a href="https://github.com/webfeathers/grimalkin/blob/main/docs/SELF-HOSTING.md#when-something-is-wrong">full guide</a>.</p>
+  </details>
+  <div class="note"><p><b>Keep it safe.</b> Your settings hold secrets. Don't share them or put them in a public place. Your memory lives only in your database, so back it up like anything you care about.</p></div>
+</section>
+
+      <div class="nav">
+        <button class="btn" type="button" id="back">Back</button>
+        <button class="btn primary" type="button" id="next">Next</button>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="install.js"></script>
+</body>
+</html>
