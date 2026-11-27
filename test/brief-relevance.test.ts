@@ -65,6 +65,16 @@ describe('brief relevance', { skip: !url && 'TEST_DATABASE_URL is not set' }, as
   }).returning()
   episodeIds.push(ep!.id)
 
+  // Hollow entities (no facts, no links): one named this week, one long ago.
+  const hollow = async (name: string, daysAgo: number) => {
+    const [row] = await db.insert(entities)
+      .values({ type: 'person', canonicalName: name, createdAt: new Date(now - daysAgo * 86_400_000) })
+      .returning()
+    ids.push(row!.id)
+  }
+  await hollow(`Recent Misparse ${tag}`, 3)
+  await hollow(`Ancient Misparse ${tag}`, 40)
+
   after(async () => {
     await client.close(); await server.close()
     await db.delete(episodes).where(inArray(episodes.id, episodeIds))
@@ -82,6 +92,15 @@ describe('brief relevance', { skip: !url && 'TEST_DATABASE_URL is not set' }, as
     assert.match(text, /Renewal review\n\s+with: Priya Raman .* — VP Finance/)
     // Times read in the owner's zone, with the zone named, not as bare UTC.
     assert.match(text, /- \w{3} \d{4}-\d\d-\d\d \d\d:\d\d \S+  Renewal review/)
+  })
+
+  test('only this week\'s never-substantiated names are listed; older ones are counted', async () => {
+    const res = await client.callTool({ name: 'brief', arguments: { hours: 24 } })
+    const text = (res.content as { text: string }[]).map((c) => c.text).join('\n')
+    const section = text.split('## Named but never substantiated')[1]?.split('\n## ')[0] ?? ''
+    assert.match(section, new RegExp(`Recent Misparse ${tag}`), text)
+    assert.doesNotMatch(text, new RegExp(`Ancient Misparse ${tag}`))
+    assert.match(section, /_\d+ older ones? (is|are) not listed\._/, section)
   })
 
   test('a window with nobody on the calendar still briefs, capped to a few guesses', async () => {
