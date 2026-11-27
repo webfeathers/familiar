@@ -1,4 +1,4 @@
-/** OAuth grants apply to Familiar context, not the upstream Google APIs. */
+/** OAuth grants apply to Grimalkin context, not the upstream Google APIs. */
 export const SCOPES = ['context:read', 'context:write'] as const
 export const DEFAULT_SCOPE = SCOPES.join(' ')
 export type ContextScope = (typeof SCOPES)[number]

@@ -5,7 +5,7 @@
 # policy) needs a real Postgres, and those suites skip silently when
 # TEST_DATABASE_URL is unset, so a run without a database still reports all
 # green. This script makes the database run the default: it starts a loopback
-# pgvector container (familiar-test-pg), migrates it, and runs every test against
+# pgvector container (grimalkin-test-pg), migrates it, and runs every test against
 # it. No database is a loud failure, not a quiet skip.
 #
 #   TEST_DATABASE_URL=...  use that database instead of the container
@@ -22,7 +22,7 @@ if [ -z "$NODE_BIN" ] || [ "$(node_major "$NODE_BIN")" -lt 22 ]; then
   for n in $(ls -d "$HOME"/.nvm/versions/node/v*/bin/node 2>/dev/null | sort -V -r); do
     if [ "$(node_major "$n")" -ge 22 ]; then NODE_BIN="$n"; break; fi
   done
-  [ -n "$NODE_BIN" ] || { echo "FAIL: Familiar needs Node 22 or newer (found $(node -v 2>/dev/null || echo none)). Install one with: nvm install 22" >&2; exit 1; }
+  [ -n "$NODE_BIN" ] || { echo "FAIL: Grimalkin needs Node 22 or newer (found $(node -v 2>/dev/null || echo none)). Install one with: nvm install 22" >&2; exit 1; }
   export PATH="$(dirname "$NODE_BIN"):$PATH"
 fi
 
@@ -31,25 +31,25 @@ if [ "${1:-}" = --unit ]; then
   exec "$NODE_BIN" --test --experimental-strip-types test/*.test.ts
 fi
 
-CONTAINER=familiar-test-pg
+CONTAINER=grimalkin-test-pg
 PORT=55433
 if [ -z "${TEST_DATABASE_URL:-}" ]; then
   command -v docker >/dev/null && docker info >/dev/null 2>&1 \
     || { echo "FAIL: the database suites need Docker running (or set TEST_DATABASE_URL to a local *test* database). For the no-database subset only: pnpm test:unit" >&2; exit 1; }
   state="$(docker ps -a --filter "name=^/${CONTAINER}\$" --format '{{.State}}')"
   if [ -z "$state" ]; then
-    docker run -d --name "$CONTAINER" -e POSTGRES_PASSWORD=test -e POSTGRES_DB=familiar_test \
+    docker run -d --name "$CONTAINER" -e POSTGRES_PASSWORD=test -e POSTGRES_DB=grimalkin_test \
       -p "127.0.0.1:$PORT:5432" pgvector/pgvector:pg17 >/dev/null
   elif [ "$state" != running ]; then
     docker start "$CONTAINER" >/dev/null
   fi
   for _ in $(seq 1 60); do
-    docker exec "$CONTAINER" pg_isready -U postgres -d familiar_test >/dev/null 2>&1 && break
+    docker exec "$CONTAINER" pg_isready -U postgres -d grimalkin_test >/dev/null 2>&1 && break
     sleep 1
   done
-  docker exec "$CONTAINER" pg_isready -U postgres -d familiar_test >/dev/null 2>&1 \
+  docker exec "$CONTAINER" pg_isready -U postgres -d grimalkin_test >/dev/null 2>&1 \
     || { echo "FAIL: $CONTAINER did not become ready" >&2; exit 1; }
-  export TEST_DATABASE_URL="postgres://postgres:test@127.0.0.1:$PORT/familiar_test"
+  export TEST_DATABASE_URL="postgres://postgres:test@127.0.0.1:$PORT/grimalkin_test"
 fi
 
 # Same guard the suites apply, checked before migrating: never touch anything

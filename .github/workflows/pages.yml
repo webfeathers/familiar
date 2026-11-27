@@ -1,4 +1,4 @@
-# Publishes site/ to GitHub Pages at https://webfeathers.github.io/familiar/.
+# Publishes site/ to GitHub Pages at https://webfeathers.github.io/grimalkin/.
 # Images come from docs/assets so the README and the site share one copy.
 name: pages
 
@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      - run: mkdir -p site/assets && cp docs/assets/familiar-avatar.svg docs/assets/familiar-avatar.png docs/assets/familiar-cat.svg docs/assets/social-preview.png site/assets/
+      - run: mkdir -p site/assets && cp docs/assets/grimalkin-avatar.svg docs/assets/grimalkin-avatar.png docs/assets/grimalkin-cat.svg docs/assets/social-preview.png site/assets/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

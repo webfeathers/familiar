@@ -3,12 +3,12 @@ import assert from 'node:assert/strict'
 import { DEFAULT_SCOPE, normalizeScope, writeDenied } from '../src/mcp/scopes.ts'
 
 // All auth/store dependencies use inert fixtures; no real login or database.
-process.env.PUBLIC_URL = 'https://familiar.example'
+process.env.PUBLIC_URL = 'https://grimalkin.example'
 process.env.ALLOWED_SUBJECT = 'test-owner'
 process.env.GOOGLE_CLIENT_ID = 'test-client'
 process.env.GOOGLE_CLIENT_SECRET = 'test-secret'
 process.env.AUTH_SECRET = 'test-only-secret-not-a-production-credential'
-process.env.DATABASE_URL = 'postgres://fixture:fixture@127.0.0.1:1/familiar_test'
+process.env.DATABASE_URL = 'postgres://fixture:fixture@127.0.0.1:1/grimalkin_test'
 delete process.env.DATABASE_PUBLIC_URL
 const { isAllowedRedirect } = await import('../src/mcp/config.ts')
 const { oauth } = await import('../src/mcp/oauth.ts')
@@ -89,7 +89,7 @@ test('signed access tokens preserve scope and reject malformed grants/audiences'
   const { SignJWT } = await import('jose')
   const wrongAudience = await new SignJWT({ scope: DEFAULT_SCOPE, client_id: clientId })
     .setProtectedHeader({ alg: 'HS256' }).setSubject('test-owner')
-    .setIssuer('https://familiar.example').setAudience('https://other.example/mcp')
+    .setIssuer('https://grimalkin.example').setAudience('https://other.example/mcp')
     .setExpirationTime('1h').sign(new TextEncoder().encode(process.env.AUTH_SECRET))
   assert.equal(await verifyAccessToken(wrongAudience), null)
 })
@@ -204,7 +204,7 @@ test('deliberate write-access request challenges or verifies without database or
   const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
   const { registerTools } = await import('../src/mcp/tools.ts')
   const challenge = wwwAuthenticate('insufficient_scope', 'context:write is required')
-  assert.match(challenge, /resource_metadata="https:\/\/familiar\.example\/\.well-known\/oauth-protected-resource\/mcp"/)
+  assert.match(challenge, /resource_metadata="https:\/\/grimalkin\.example\/\.well-known\/oauth-protected-resource\/mcp"/)
   assert.match(challenge, /scope="context:read context:write"/)
   for (const scope of ['context:read', DEFAULT_SCOPE]) {
     const server = new McpServer({ name: 'grant-test', version: '0' })
@@ -265,7 +265,7 @@ test('consent only counts from the browser that was shown the screen', async (t)
   assert.equal((await consent({ cookie }, sealedFrom(await other.text()))).status, 403)
   assert.equal((await consent({ cookie }, 'not-a-signed-request')).status, 400)
 
-  const ok = await consent({ cookie, origin: 'https://familiar.example' })
+  const ok = await consent({ cookie, origin: 'https://grimalkin.example' })
   assert.equal(ok.status, 302)
   assert.equal(new URL(ok.headers.get('location')!).origin, 'https://accounts.google.com')
   for (const w of writes) assert.equal(w.mock.callCount(), 0)
