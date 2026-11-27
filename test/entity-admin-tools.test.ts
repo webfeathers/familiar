@@ -244,6 +244,9 @@ describe('entity admin MCP tools', { skip: !url && 'TEST_DATABASE_URL is not set
     assert.ok((await reload(e.id)).retiredAt)
     assert.doesNotMatch(await brief(), new RegExp(name))
 
+    // An empty entity's id is reachable by name, not only from the brief.
+    assert.match((await call('what_do_you_know', { about: name })).text, new RegExp(`no live beliefs\\. entity_id=${e.id}`))
+
     const again = await call('retire_entity', { entity_id: e.id })
     assert.equal(again.res.isError, true)
     assert.match(again.text, /already retired/)
