@@ -4,7 +4,7 @@ import { oauthToolMeta } from './scopes.ts'
 
 /**
  * The authored half of `how_i_work`: rules the owner wrote, as opposed to the
- * preferences Familiar learns. Set your own with
+ * preferences Grimalkin learns. Set your own with
  *
  *   PCL_OPERATING_POLICY          one rule per line ("1. " / "- " prefixes are dropped)
  *   PCL_OPERATING_POLICY_VERSION  any label; bump it when the rules change

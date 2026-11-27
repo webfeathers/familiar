@@ -1,7 +1,7 @@
 /**
  * Who this deployment belongs to.
  *
- * Familiar is single-user, but the code names no one: every owner-specific value
+ * Grimalkin is single-user, but the code names no one: every owner-specific value
  * comes from the environment, and the defaults are neutral so a fresh install
  * works before any of it is set.
  *
