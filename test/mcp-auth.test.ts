@@ -12,6 +12,9 @@ process.env.DATABASE_URL = 'postgres://fixture:fixture@127.0.0.1:1/familiar_test
 delete process.env.DATABASE_PUBLIC_URL
 const { isAllowedRedirect } = await import('../src/mcp/config.ts')
 const { oauth } = await import('../src/mcp/oauth.ts')
+const clientMetadata = await import('../src/mcp/client-metadata.ts')
+// Name resolution is stubbed for the whole file: no test here touches the network.
+clientMetadata.net.resolve = async () => ['93.184.216.34']
 const { issueAccessToken, verifyAccessToken } = await import('../src/mcp/tokens.ts')
 const { db, pool } = await import('../src/store/index.ts')
 const { protectedResourceMetadata, authorizationServerMetadata, wwwAuthenticate } = await import('../src/mcp/metadata.ts')
@@ -47,6 +50,7 @@ test('discovery, scope parsing and mutation checks agree', () => {
 })
 
 test('authorization displays the exact requested grant and validates client redirect metadata', async (t) => {
+  clientMetadata.resetClientCache()
   t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
     client_name: '<ChatGPT>', redirect_uris: [callback],
   }), { headers: { 'content-type': 'application/json' } }))
@@ -66,6 +70,7 @@ test('authorization displays the exact requested grant and validates client redi
   const missingPkce = authQuery(); missingPkce.delete('code_challenge')
   const bad = await oauth.request('/authorize?' + missingPkce)
   assert.equal(new URL(bad.headers.get('location')!).searchParams.get('error'), 'invalid_request')
+  clientMetadata.resetClientCache()
   t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ redirect_uris: ['https://claude.ai/api/mcp/auth_callback'] })))
   const mismatch = await oauth.request('/authorize?' + authQuery())
   assert.equal(new URL(mismatch.headers.get('location')!).searchParams.get('error'), 'invalid_request')
@@ -225,4 +230,117 @@ test('deliberate write-access request challenges or verifies without database or
   }
   for (const call of calls) assert.equal(call.mock.callCount(), 0)
   assert.equal(network.mock.callCount(), 0)
+})
+
+const consentCookie = (res: Response) => res.headers.getSetCookie().find((c) => c.startsWith('__Host-pcl-consent='))
+const sealedFrom = (html: string) => html.match(/name="pending" value="([^"]+)"/)![1]!
+
+test('consent only counts from the browser that was shown the screen', async (t) => {
+  clientMetadata.resetClientCache()
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ client_name: 'Fixture', redirect_uris: [callback] })))
+  // Nothing is written until the owner has signed in with Google.
+  const writes = ['insert', 'update', 'delete'].map((m) =>
+    t.mock.method(db, m as 'insert', () => { throw new Error('consent must not write before sign-in') }))
+
+  const page = await oauth.request('/authorize?' + authQuery())
+  assert.equal(page.status, 200)
+  assert.match(page.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/)
+  assert.equal(page.headers.get('x-frame-options'), 'DENY')
+  // no-referrer would make the browser send `Origin: null` with the form and fail the check below.
+  assert.equal(page.headers.get('referrer-policy'), 'same-origin')
+  const setCookie = consentCookie(page)!
+  assert.match(setCookie, /HttpOnly/i); assert.match(setCookie, /Secure/i); assert.match(setCookie, /SameSite=Strict/i)
+  const cookie = setCookie.split(';')[0]!
+  const sealed = sealedFrom(await page.text())
+  const consent = (headers: Record<string, string>, pending = sealed) =>
+    oauth.request('/consent', { method: 'POST', headers, body: new URLSearchParams({ pending }) })
+
+  // A forged cross-site submission: the attacker has a valid signed request (anyone
+  // can fetch one) but the victim's browser sends no consent cookie with it.
+  assert.equal((await consent({})).status, 403)
+  assert.equal((await consent({ cookie: '__Host-pcl-consent=guessed' })).status, 403)
+  assert.equal((await consent({ cookie, origin: 'https://evil.example' })).status, 403)
+  // A request sealed for another browser does not match this browser's cookie.
+  const other = await oauth.request('/authorize?' + authQuery())
+  assert.equal((await consent({ cookie }, sealedFrom(await other.text()))).status, 403)
+  assert.equal((await consent({ cookie }, 'not-a-signed-request')).status, 400)
+
+  const ok = await consent({ cookie, origin: 'https://familiar.example' })
+  assert.equal(ok.status, 302)
+  assert.equal(new URL(ok.headers.get('location')!).origin, 'https://accounts.google.com')
+  for (const w of writes) assert.equal(w.mock.callCount(), 0)
+})
+
+test('revoke kills the presented refresh token and always answers 200', async (t) => {
+  const updates: unknown[] = []
+  t.mock.method(db, 'update', () => ({ set: (v: unknown) => ({ where: async () => { updates.push(v) } }) }) as any)
+  const revoke = (body: Record<string, string>) => oauth.request('/revoke', { method: 'POST', body: new URLSearchParams(body) })
+  assert.equal((await revoke({ token: 'fixture-refresh-token' })).status, 200)
+  assert.equal(updates.length, 1)
+  assert.ok((updates[0] as { replacedAt: Date }).replacedAt instanceof Date)
+  assert.equal((await revoke({})).status, 200)
+  assert.equal(updates.length, 1)
+})
+
+test('tokens for anyone but the owner are refused, and a weak signing secret stops startup', async () => {
+  const { token } = await issueAccessToken({ subject: 'someone-else', clientId, scope: DEFAULT_SCOPE })
+  assert.equal(await verifyAccessToken(token), null)
+  const { spawnSync } = await import('node:child_process')
+  const start = (secret: string) => spawnSync(process.execPath,
+    ['--experimental-strip-types', '-e', "await import('./src/mcp/tokens.ts'); process.exit(0)"],
+    { env: { ...process.env, AUTH_SECRET: secret, BETTER_AUTH_SECRET: '' }, encoding: 'utf8' })
+  const weak = start('changeme')
+  assert.notEqual(weak.status, 0)
+  assert.match(weak.stderr, /AUTH_SECRET is too short/)
+  assert.equal(start('x'.repeat(32)).status, 0)
+})
+
+test('client metadata is only fetched from public https addresses, with redirects and size held in check', async (t) => {
+  const { resolveClient, isPublicAddress, resetClientCache, net } = clientMetadata
+  for (const ip of ['127.0.0.1', '10.0.0.5', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0',
+    '::1', '::', 'fe80::1', 'fd12::1', '::ffff:10.0.0.1', '::ffff:7f00:1', 'not-an-ip']) assert.equal(isPublicAddress(ip), false, ip)
+  for (const ip of ['93.184.216.34', '8.8.8.8', '2606:4700::1111']) assert.ok(isPublicAddress(ip), ip)
+
+  const fetched: string[] = []
+  const serve = (handler: (url: string) => Response) =>
+    t.mock.method(globalThis, 'fetch', async (u: URL | string) => { fetched.push(String(u)); return handler(String(u)) })
+  const json = (doc: unknown) => new Response(JSON.stringify(doc))
+
+  resetClientCache()
+  serve(() => json({ client_name: 'x' }))
+  for (const id of ['http://client.example/c.json', 'https://127.0.0.1/c.json', 'https://[::1]/c.json',
+    'https://client.example:8443/c.json', 'https://user:pw@client.example/c.json', 'not a url']) {
+    assert.equal(await resolveClient(id), null, id)
+  }
+  assert.equal(fetched.length, 0)
+
+  // A public-looking name that resolves to a private address is refused unfetched.
+  const realResolve = net.resolve
+  net.resolve = async (host) => (host === 'internal.example' ? ['10.0.0.7'] : ['93.184.216.34'])
+  try {
+    assert.equal(await resolveClient('https://internal.example/c.json'), null)
+    assert.equal(fetched.length, 0)
+
+    // A redirect is followed by hand and held to the same rules.
+    serve((u) => u.includes('start') ? new Response(null, { status: 302, headers: { location: 'https://internal.example/secret' } }) : json({}))
+    assert.equal(await resolveClient('https://client.example/start.json'), null)
+    assert.deepEqual(fetched, ['https://client.example/start.json'])
+
+    serve((u) => u.includes('hop') ? new Response(null, { status: 302, headers: { location: '/final.json' } }) : json({ client_name: 'Moved', redirect_uris: [callback, 7] }))
+    assert.deepEqual(await resolveClient('https://client.example/hop.json'), { name: 'Moved', redirectUris: [callback] })
+
+    serve(() => new Response('x'.repeat(70_000)))
+    assert.equal(await resolveClient('https://client.example/big.json'), null)
+    serve(() => new Response('not json'))
+    assert.equal(await resolveClient('https://client.example/bad.json'), null)
+
+    // Real clients are cached; a flood of new client_ids runs out of fetch budget.
+    resetClientCache(); fetched.length = 0
+    serve(() => json({ client_name: 'Cached' }))
+    await resolveClient('https://client.example/a.json'); await resolveClient('https://client.example/a.json')
+    assert.equal(fetched.length, 1)
+    for (let i = 0; i < 40; i++) await resolveClient(`https://client.example/flood-${i}.json`)
+    assert.equal(fetched.length, 30)
+    assert.equal((await resolveClient('https://client.example/a.json'))?.name, 'Cached')
+  } finally { net.resolve = realResolve; resetClientCache() }
 })

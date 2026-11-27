@@ -52,6 +52,21 @@ record(
       : 'missing (AUTH_SECRET or BETTER_AUTH_SECRET)',
 )
 
+// Present is not enough for this one: the MCP service refuses to start on a
+// short secret (src/mcp/tokens.ts), so say so here rather than at deploy time.
+{
+  const secret = process.env.AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET ?? ''
+  if (secret) {
+    record(
+      'AUTH_SECRET strength',
+      secret.length >= 32 ? 'ok' : 'fail',
+      secret.length >= 32
+        ? 'long enough'
+        : `only ${secret.length} characters; at least 32 required — generate with: openssl rand -base64 32`,
+    )
+  }
+}
+
 // ── 2. Postgres: reachable, pgvector installed, migrations applied ───────────
 
 const hasDb = present('DATABASE_URL') || present('DATABASE_PUBLIC_URL')

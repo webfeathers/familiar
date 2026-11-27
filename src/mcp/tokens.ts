@@ -11,14 +11,30 @@ import { and, eq, isNull, gt } from 'drizzle-orm'
 import { db } from '../store/index.ts'
 import { oauthRefreshTokens } from '../store/schema.ts'
 import { normalizeScope } from './scopes.ts'
-import { ISSUER, RESOURCE, TTL } from './config.ts'
+import { ALLOWED_SUBJECT, ISSUER, RESOURCE, TTL } from './config.ts'
 
 // `BETTER_AUTH_SECRET` is the historical name from when this was going to be
 // built on better-auth. Accept either so an existing .env keeps working.
 const secretRaw =
   process.env.AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET ?? ''
 if (!secretRaw) throw new Error('AUTH_SECRET (or BETTER_AUTH_SECRET) is not set')
-const SECRET = new TextEncoder().encode(secretRaw)
+
+/**
+ * This one secret signs every access token, and also the authorize-request
+ * token that /authorize hands to any anonymous visitor. Anyone can therefore
+ * collect a signature and guess at the secret offline for as long as they
+ * like; a short or memorable one is eventually found, and with it they can
+ * mint their own access tokens. So a weak secret is refused at startup rather
+ * than discovered later.
+ */
+export const MIN_SECRET_LENGTH = 32
+if (secretRaw.length < MIN_SECRET_LENGTH) {
+  throw new Error(
+    `AUTH_SECRET is too short (${secretRaw.length} characters; at least ${MIN_SECRET_LENGTH} required). ` +
+      'Generate one with: openssl rand -base64 32',
+  )
+}
+export const SECRET = new TextEncoder().encode(secretRaw)
 
 export interface AccessClaims extends JWTPayload {
   sub: string
@@ -61,6 +77,9 @@ export async function verifyAccessToken(
       issuer: ISSUER,
       audience: RESOURCE,
     })
+    // Only the owner ever holds a token. Checked on every request, not just at
+    // sign-in, so a change of ALLOWED_SUBJECT takes effect immediately.
+    if (payload.sub !== ALLOWED_SUBJECT) return null
     if (typeof payload.sub !== 'string' ||
         typeof payload.client_id !== 'string' ||
         typeof payload.scope !== 'string' || !normalizeScope(payload.scope)) return null
@@ -113,7 +132,7 @@ export async function rotateRefreshToken(
     .limit(1)
 
   const row = existing[0]
-  if (!row || !normalizeScope(row.scope)) return null
+  if (!row || row.subject !== ALLOWED_SUBJECT || !normalizeScope(row.scope)) return null
   const scope = requestedScope === undefined ? row.scope : normalizeScope(requestedScope)
   if (!scope || scope.split(' ').some((s) => !row.scope.split(/\s+/).includes(s))) return null
 
@@ -129,6 +148,17 @@ export async function rotateRefreshToken(
   })
 
   return { subject: row.subject, scope, refreshToken }
+}
+
+/**
+ * Revoke a refresh token (RFC 7009), ending that client's session once its
+ * current access token runs out. Unknown and already-dead tokens are a no-op.
+ */
+export async function revokeRefreshToken(token: string): Promise<void> {
+  await db
+    .update(oauthRefreshTokens)
+    .set({ replacedAt: new Date() })
+    .where(and(eq(oauthRefreshTokens.tokenHash, hash(token)), isNull(oauthRefreshTokens.replacedAt)))
 }
 
 /** PKCE S256 check. */
