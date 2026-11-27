@@ -628,10 +628,15 @@ export function formatBundle(b: ContextBundle): string {
  * `get_context` call, nobody asked for this lookup and nobody will check it.
  */
 export async function headlineFact(subject: string): Promise<string | null> {
+  return (await headline(subject))?.line ?? null
+}
+
+/** `headlineFact`, plus which entity it resolved to, for callers that need both. */
+export async function headline(subject: string): Promise<{ entityId: string; line: string } | null> {
   const b = await assembleContext(subject, { limit: 1, hops: 0, fuzzy: false })
   if (!b) return null
   const top = b.facts[0] ?? b.anticipations[0]
-  return `${b.subject.name}${top ? ` — ${top.statement}` : ''}`
+  return { entityId: b.subject.id, line: `${b.subject.name}${top ? ` — ${top.statement}` : ''}` }
 }
 
 // ── Episode search ───────────────────────────────────────────────────────────

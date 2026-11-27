@@ -19,7 +19,7 @@ import {
   assembleContext,
   calendarFreshnessNote,
   formatBundle,
-  headlineFact,
+  headline,
   live,
   resolveSubject,
   searchEpisodes,
@@ -111,6 +111,10 @@ function describePreference(r: PreferenceResult): string {
       return `reinforces="${r.reinforces}" matches ${r.candidates} preferences. Nothing was recorded. Pass more characters of the id.`
   }
 }
+
+/** Most inferences a brief lists, and how many of those may be about people outside the window. */
+const BRIEF_ANTICIPATIONS = 10
+const BRIEF_UNRELATED_ANTICIPATIONS = 3
 
 export function registerTools(server: McpServer, scope: string, reviewer = 'authenticated-owner', writeAuthChallenge?: string) {
   // ── request_memory_write_access ────────────────────────────────────────────
@@ -690,6 +694,10 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
     async ({ hours }) => {
       const until = new Date(Date.now() + hours * 3600_000)
       const sections: string[] = [calendarCoverage]
+      // Everyone the window's meetings resolved to. "Worth a look" is about
+      // them first: an inference about someone you are not seeing today is
+      // the brief reading out the whole store.
+      const inWindow = new Set<string>()
 
       // 1. What's coming.
       const upcoming = await db
@@ -713,7 +721,9 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
         const seenAttendee = new Map<string, string | null>()
         const lookup = async (handle: string) => {
           if (!seenAttendee.has(handle)) {
-            seenAttendee.set(handle, await headlineFact(handle))
+            const h = await headline(handle)
+            if (h) inWindow.add(h.entityId)
+            seenAttendee.set(handle, h?.line ?? null)
           }
           return seenAttendee.get(handle) ?? null
         }
@@ -753,12 +763,18 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
         sections.push(`## Next ${hours}h\nNo native-ingested calendar entries found.`)
       }
 
-      // 2. Anticipations — inferences, flagged as such, never as fact.
-      const antic = await db
+      // 2. Anticipations — inferences, flagged as such, never as fact. Those
+      //    about the window's attendees come first; the rest of the store gets
+      //    a few lines at most, so the section stays about what is coming.
+      const attendeeFirst = inWindow.size
+        ? sql<boolean>`${observations.entityId} in (${sql.join([...inWindow].map((id) => sql`${id}::uuid`), sql`, `)})`
+        : sql<boolean>`false`
+      const anticRows = await db
         .select({
           statement: observations.statement,
           confidence: observations.confidence,
           name: entities.canonicalName,
+          attendee: attendeeFirst,
         })
         .from(observations)
         .innerJoin(entities, eq(entities.id, observations.entityId))
@@ -766,8 +782,10 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
         // has passed is precisely the row that must not appear here, and it is
         // the `validTo` half of the predicate that excludes it.
         .where(and(eq(observations.category, 'anticipation'), live))
-        .orderBy(desc(observations.confidence))
-        .limit(10)
+        .orderBy(desc(attendeeFirst), desc(observations.confidence))
+        .limit(BRIEF_ANTICIPATIONS)
+      let elsewhere = 0
+      const antic = anticRows.filter((a) => a.attendee || elsewhere++ < BRIEF_UNRELATED_ANTICIPATIONS)
 
       if (antic.length) {
         sections.push(
