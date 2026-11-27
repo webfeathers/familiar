@@ -358,7 +358,9 @@ export function registerTools(server: McpServer, scope: string, reviewer = 'auth
         return text(
           total
             ? `"${entity.canonicalName}" has ${total} live belief(s) but none at offset ${offset}.`
-            : `"${entity.canonicalName}" exists but has no live beliefs${category ? ` in category ${category}` : ''}.`,
+            // The id is the one thing an empty entity can be acted on by
+            // (retire_entity, merge_entities), so it must be shown here.
+            : `"${entity.canonicalName}" exists but has no live beliefs${category ? ` in category ${category}` : ''}. entity_id=${entity.id}`,
         )
       }
 
