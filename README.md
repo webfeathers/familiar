@@ -114,7 +114,7 @@ Use the `sub` (a stable number), not your email address.
 |---|---|
 | `DATABASE_URL` | Postgres connection string |
 | `PUBLIC_URL` | Exact public origin of the MCP service, e.g. `https://familiar.example.com`, no trailing slash |
-| `AUTH_SECRET` | Signs issued tokens and the OAuth state cookie. Generate with `openssl rand -base64 32` |
+| `AUTH_SECRET` | Signs issued tokens and the OAuth state cookie. At least 32 random characters; generate with `openssl rand -base64 32` |
 | `ALLOWED_SUBJECT` | The one Google `sub` allowed to sign in |
 | `PCL_SELF` | Your name, used for the owner entity that preferences attach to. Defaults to `Owner`; set it before first use, since renaming later points preferences at a different entity |
 | `PCL_SELF_EMAILS` | Your own addresses or domains, comma-separated (`me@example.com, example.com`), left out of meeting briefs |
@@ -190,6 +190,11 @@ one.
   refresh token, and only with read-only calendar and contacts scopes.
 - Redirect URIs are an exact allow-list, so the server is not an open redirector.
 - Read and write are separate scopes, and tokens keep the scopes they were granted.
+- Approving a client only counts from the browser that was shown the consent screen, and the
+  screen cannot be framed by another site.
+- Removing a connector revokes its refresh token. `pnpm auth:signout` signs every client out.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 Your memory lives in your own database. Back it up the way you would any database you care about.
 

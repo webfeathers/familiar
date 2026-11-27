@@ -98,7 +98,7 @@ More detail is in [CREDENTIALS.md](CREDENTIALS.md).
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string |
 | `PUBLIC_URL` | yes (mcp) | Exact origin of the MCP service, e.g. `https://familiar.example.com`. No trailing slash, no path. It becomes the OAuth issuer, so a mismatch breaks discovery |
-| `AUTH_SECRET` | yes (mcp) | Signs access tokens and the sign-in state cookie. `openssl rand -base64 32` |
+| `AUTH_SECRET` | yes (mcp) | Signs access tokens and the sign-in state cookie. At least 32 characters: `openssl rand -base64 32` |
 | `ALLOWED_SUBJECT` | yes (mcp) | Your Google `sub`, from `pnpm mint:google` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | yes | The OAuth client from step 1 |
 | `GOOGLE_REFRESH_TOKEN_WORK` | yes (worker) | The refresh token from step 1. Without it the service still runs, but nothing syncs |
@@ -236,3 +236,10 @@ for a `brief` before your next meeting.
 - `.env` is gitignored. Keep secrets in your host's variables, not in files you commit.
 - Your memory lives only in your database. Back it up like any database you care about.
 - Access tokens last an hour. Refresh tokens last 30 days and are replaced on every use.
+- `AUTH_SECRET` must be at least 32 characters, and random. The service refuses to start on a
+  shorter one. Use `openssl rand -base64 32`, not something you typed.
+- Removing the connector in a client revokes its refresh token. To sign every client out at once
+  (a lost device, a token you think leaked), run `pnpm auth:signout`, then set a new `AUTH_SECRET`
+  and restart the MCP service. Do both: the script ends the sessions, and the new secret cuts off
+  access tokens that were already issued.
+- Found a security problem? See [SECURITY.md](../SECURITY.md).

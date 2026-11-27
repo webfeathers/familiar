@@ -10,13 +10,18 @@
  *      a static client_id at Google while accepting arbitrary MCP clients, which
  *      is precisely the configuration the spec warns about. Without it, any
  *      client that can reach /authorize could ride our Google identity.
+ *      The approval only counts from the browser that was shown the screen:
+ *      /authorize sets a cookie, the signed request carries its value, and
+ *      /consent requires both. A page elsewhere cannot submit the form for you,
+ *      and the screen refuses to be framed.
  *   3. Only after approval do we set the state cookie and bounce to Google.
  *   4. Google returns an ID token; the code is issued ONLY if `sub` matches
  *      ALLOWED_SUBJECT. That comparison is the entire access-control model.
  */
-import { randomBytes } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
+import { bodyLimit } from 'hono/body-limit'
 import { SignJWT, jwtVerify, decodeJwt } from 'jose'
 import { and, eq, isNull, gt } from 'drizzle-orm'
 import { db } from '../store/index.ts'
@@ -29,22 +34,43 @@ import {
   isAllowedRedirect,
 } from './config.ts'
 import {
+  SECRET,
   issueAccessToken,
   issueRefreshToken,
+  revokeRefreshToken,
   rotateRefreshToken,
   verifyPkce,
 } from './tokens.ts'
+import { resolveClient } from './client-metadata.ts'
 import { normalizeScope, consentDescription } from './scopes.ts'
 import { authorizationServerMetadata, protectedResourceMetadata } from './metadata.ts'
 
-const SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET ?? '',
-)
-const STATE_COOKIE = '__Host-pcl-state'
+/**
+ * `__Host-` cookies must be Secure, and Safari will not store a Secure cookie
+ * from plain http, so a local `http://localhost` deployment gets unprefixed,
+ * non-Secure names. Anything served over https gets the strict form.
+ */
+const HTTPS = ISSUER.startsWith('https://')
+const cookieName = (name: string) => (HTTPS ? `__Host-${name}` : name)
+const STATE_COOKIE = cookieName('pcl-state')
+const CONSENT_COOKIE = cookieName('pcl-consent')
+
+/** Keeps a signed authorize request from being mistaken for any other token. */
+const STATE_AUDIENCE = `${ISSUER}/authorize`
+
+const sameValue = (a: string, b: string) => {
+  const x = Buffer.from(a)
+  const y = Buffer.from(b)
+  return x.length === y.length && timingSafeEqual(x, y)
+}
 
 /** The authorize request, carried across the consent + Google round trips. */
 interface PendingAuth {
   client_id: string
+  /** Display name from the client's metadata document, kept for the audit row. */
+  client_name: string
+  /** Must match the consent cookie set alongside the screen this was rendered into. */
+  csrf: string
   redirect_uri: string
   code_challenge: string
   scope: string
@@ -55,50 +81,16 @@ interface PendingAuth {
 const sealState = (p: PendingAuth) =>
   new SignJWT({ ...p })
     .setProtectedHeader({ alg: 'HS256' })
+    .setAudience(STATE_AUDIENCE)
     .setIssuedAt()
     .setExpirationTime(`${TTL.loginStateSeconds}s`)
     .sign(SECRET)
 
 async function openState(token: string): Promise<PendingAuth | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET)
+    const { payload } = await jwtVerify(token, SECRET, { audience: STATE_AUDIENCE })
+    if (typeof payload.csrf !== 'string' || !payload.csrf) return null
     return payload as unknown as PendingAuth
-  } catch {
-    return null
-  }
-}
-
-/**
- * Resolve a client via its CIMD document. The client_id IS the URL of a JSON
- * document describing the client — so there is nothing to register and no
- * client table to keep.
- */
-async function resolveClient(
-  clientId: string,
-): Promise<{ name: string; redirectUris: string[]; raw: unknown } | null> {
-  let url: URL
-  try {
-    url = new URL(clientId)
-  } catch {
-    return null
-  }
-  if (url.protocol !== 'https:') return null
-
-  try {
-    const res = await fetch(clientId, {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok) return null
-    const doc = (await res.json()) as {
-      client_name?: string
-      redirect_uris?: string[]
-    }
-    return {
-      name: doc.client_name ?? url.hostname,
-      redirectUris: doc.redirect_uris ?? [],
-      raw: doc,
-    }
   } catch {
     return null
   }
@@ -154,6 +146,10 @@ function errorRedirect(
 }
 
 export const oauth = new Hono()
+
+// Nothing these routes accept is large: a consent form or a token request.
+// (The MCP endpoint is mounted separately and is not subject to this.)
+oauth.use(bodyLimit({ maxSize: 64 * 1024 }))
 
 // ── Discovery ────────────────────────────────────────────────────────────────
 // Claude tries the path-suffixed PRM variant first; serve both, identical body.
@@ -231,8 +227,11 @@ oauth.get('/authorize', async (c) => {
       'Request context:read, optionally with context:write'))
   }
 
+  const csrf = randomBytes(16).toString('base64url')
   const pending: PendingAuth = {
     client_id: q.client_id,
+    client_name: client.name,
+    csrf,
     redirect_uri: redirectUri,
     code_challenge: q.code_challenge,
     scope,
@@ -246,6 +245,24 @@ oauth.get('/authorize', async (c) => {
   // Legacy consent rows do not record scopes. Never reuse them to silently
   // expand access; show the exact grant on every authorization/reconnect.
   // Refresh tokens continue to work without a new consent round trip.
+  //
+  // SameSite=Strict: the browser sends this only with requests that start on
+  // this origin, which is exactly the consent form and nothing else.
+  setCookie(c, CONSENT_COOKIE, csrf, {
+    path: '/',
+    httpOnly: true,
+    secure: HTTPS,
+    sameSite: 'Strict',
+    maxAge: TTL.loginStateSeconds,
+  })
+  // Clickjacking: an invisible frame over a decoy button is the other way to
+  // get an approval nobody meant to give.
+  c.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
+  c.header('X-Frame-Options', 'DENY')
+  // `same-origin`, not `no-referrer`: under no-referrer the browser sends
+  // `Origin: null` with the form, and /consent would refuse its own screen.
+  c.header('Referrer-Policy', 'same-origin')
+  c.header('Cache-Control', 'no-store')
   return c.html(consentPage(client.name, q.client_id, sealed, scope))
 })
 
@@ -274,11 +291,16 @@ oauth.post('/consent', async (c) => {
   const pending = await openState(sealed)
   if (!pending) return c.text('Consent request expired — start again.', 400)
 
-  const client = await resolveClient(pending.client_id)
-  await db
-    .insert(oauthConsents)
-    .values({ clientId: pending.client_id, clientMetadata: client?.raw ?? null })
-    .onConflictDoNothing()
+  // The approval must come from this origin, in the browser that was shown the
+  // screen. The signed request alone proves neither: /authorize hands one to
+  // anyone who asks.
+  const origin = c.req.header('origin')
+  if (origin && origin !== ISSUER) return c.text('Cross-site consent refused.', 403)
+  const cookie = getCookie(c, CONSENT_COOKIE)
+  deleteCookie(c, CONSENT_COOKIE, { path: '/', secure: HTTPS })
+  if (!cookie || !sameValue(cookie, pending.csrf)) {
+    return c.text('This approval did not come from the consent screen — start again from your client.', 403)
+  }
 
   // The state cookie is set only now — after approval, never before.
   return c.redirect(await beginGoogleLogin(c, sealed))
@@ -289,7 +311,7 @@ async function beginGoogleLogin(c: Context, sealed: string): Promise<string> {
   setCookie(c, STATE_COOKIE, `${nonce}.${sealed}`, {
     path: '/',
     httpOnly: true,
-    secure: true,
+    secure: HTTPS,
     sameSite: 'Lax',
     maxAge: TTL.loginStateSeconds,
   })
@@ -310,7 +332,7 @@ oauth.get('/oauth/google/callback', async (c) => {
   // `secure` is REQUIRED on delete too, not just on set: Hono rejects any
   // __Host-prefixed cookie without it, and this throwing here takes out the
   // whole callback before it can read a single parameter.
-  deleteCookie(c, STATE_COOKIE, { path: '/', secure: true })
+  deleteCookie(c, STATE_COOKIE, { path: '/', secure: HTTPS })
   if (!cookie) return c.text('Login state missing or expired.', 400)
 
   const idx = cookie.indexOf('.')
@@ -345,6 +367,13 @@ oauth.get('/oauth/google/callback', async (c) => {
   if (claims.sub !== ALLOWED_SUBJECT) {
     return c.text('This account is not authorised for this server.', 403)
   }
+
+  // Record the approval only now, with the owner signed in. Written any
+  // earlier, it would be a database row any anonymous visitor could create.
+  await db
+    .insert(oauthConsents)
+    .values({ clientId: pending.client_id, clientMetadata: { client_name: pending.client_name } })
+    .onConflictDoNothing()
 
   const authCode = randomBytes(32).toString('base64url')
   await db.insert(oauthCodes).values({
@@ -461,7 +490,11 @@ oauth.post('/token', async (c) => {
 })
 
 oauth.post('/revoke', async (c) => {
-  await c.req.formData().catch(() => null)
+  const form = await c.req.formData().catch(() => null)
+  const token = String(form?.get('token') ?? '')
+  // Only refresh tokens can be revoked. Access tokens are stateless and expire
+  // within the hour; revoking the refresh token is what ends the session.
+  if (token) await revokeRefreshToken(token)
   // RFC 7009: always 200, regardless of whether the token existed.
   return c.body(null, 200)
 })
