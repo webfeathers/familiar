@@ -21,6 +21,13 @@
  *  - ONE HOP, NOT N. Two hops from a person reaches their colleague's spouse's
  *    employer, which is noise wearing the costume of relevance. The neighbour
  *    ring is there to answer "who is this to me", not to transit the graph.
+ *  - A NEIGHBOUR'S FACT MUST BE ABOUT THE SUBJECT. One hop bounds how far the
+ *    read walks, not what it brings back. A teammate's birthday is one hop from
+ *    their project and scores well over the floor, yet it has nothing to say
+ *    about the project. So a neighbour contributes a fact only when that fact
+ *    names the subject, or matches the topic the caller asked about; the
+ *    neighbour itself still appears under Related, with its summary, which is
+ *    what "who is this to me" actually needs.
  */
 import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
@@ -126,6 +133,13 @@ const CORROBORATION_SATURATION = 5
  * subject's own facts when it isn't.
  */
 const HOP_DECAY = 0.45
+
+/**
+ * Shortest first name used to recognise a person in a neighbour's facts.
+ * "Dana owns the runbook" names Dana Whitfield; a two-letter token ("Al", "Jo")
+ * appears inside too many unrelated sentences to stand for anyone.
+ */
+const MIN_FIRST_NAME = 3
 
 /**
  * Facts scoring below this are dropped even when there is room left in the
@@ -301,6 +315,8 @@ export interface RelatedEntity {
   relation: string
   /** 'out' = subject → other; 'in' = other → subject. Direction changes meaning. */
   direction: 'out' | 'in'
+  /** The neighbour's one-line summary, when it has one: who they are, without their facts. */
+  summary?: string
 }
 
 export interface ContextBundle {
@@ -379,15 +395,50 @@ function topicFilter(topic: string) {
   }
 }
 
+/**
+ * The names a neighbour's fact would use for the subject: canonical name,
+ * aliases, and a person's first name. Type-agnostic on purpose, so a new entity
+ * type is covered the day it is added; a project that goes by a shorter name
+ * gets it as an alias, which is what aliases are for.
+ */
+export function subjectNames(e: Pick<Entity, 'canonicalName' | 'aliases' | 'type'>): string[] {
+  const names = [e.canonicalName, ...e.aliases]
+  if (e.type === 'person') {
+    const first = e.canonicalName.trim().split(/\s+/)[0] ?? ''
+    if (first.length >= MIN_FIRST_NAME) names.push(first)
+  }
+  return [...new Set(names.map((n) => n.trim()).filter(Boolean))]
+}
+
+/**
+ * Whole-word, case-insensitive "names one of these" over the statement, as a
+ * Postgres regex so the neighbour ring is filtered before it is fetched, not
+ * after. `\m`/`\M` are word boundaries, so "Atlas" does not match
+ * "Atlassian". Each is applied only where the name starts or ends with a word
+ * character: a boundary next to the "+" of "C++" could never match.
+ */
+export function mentionPattern(names: string[]): string {
+  return names.map((n) => {
+    const body = n.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
+    return (/^\w/.test(n) ? '\\m' : '') + body + (/\w$/.test(n) ? '\\M' : '')
+  }).join('|')
+}
+
+function mentionsAny(names: string[]) {
+  return sql`${observations.statement} ~* ${mentionPattern(names)}`
+}
+
 async function observationCandidates(
   entityIds: string[],
   topic?: string,
+  mustMention?: string[],
 ): Promise<{ rows: Observation[]; truncated: boolean }> {
   const filter = topic ? topicFilter(topic) : null
   const rows = await db
     .select()
     .from(observations)
-    .where(and(inArray(observations.entityId, entityIds), live, filter?.match))
+    .where(and(inArray(observations.entityId, entityIds), live, filter?.match,
+      mustMention?.length ? mentionsAny(mustMention) : undefined))
     // The ceiling has to cut the least useful rows. Nearly every session-written
     // fact carries the same confidence, so confidence alone left the cut to the
     // id tie-break: on an entity past the ceiling, an arbitrary 250 by UUID
@@ -425,7 +476,7 @@ export async function assembleContext(
   // manager but not the report.
   const linked = (near: AnyPgColumn, far: AnyPgColumn) =>
     db
-      .select({ id: entities.id, name: entities.canonicalName, relation: links.relation })
+      .select({ id: entities.id, name: entities.canonicalName, relation: links.relation, summary: entities.summary })
       .from(links)
       .innerJoin(entities, eq(far, entities.id))
       .where(and(eq(near, entity.id), isNull(links.invalidatedAt), isNull(entities.mergedInto)))
@@ -446,13 +497,16 @@ export async function assembleContext(
     ]) {
       if (seen.has(r.id)) continue
       seen.add(r.id)
-      related.push(r)
+      const { summary, ...rest } = r
+      related.push(summary ? { ...rest, summary } : rest)
       if (related.length >= MAX_NEIGHBOURS) break
     }
   }
 
+  // With a topic, the caller has said what is relevant and the topic filter is
+  // the gate. Without one, a neighbour's fact has to name the subject.
   const neighbourCandidates = related.length
-    ? await observationCandidates(related.map(r => r.id), topic)
+    ? await observationCandidates(related.map(r => r.id), topic, topic ? undefined : subjectNames(entity))
     : { rows: [], truncated: false }
 
   const byEntity = new Map(related.map((r) => [r.id, r]))
@@ -545,10 +599,11 @@ export function formatBundle(b: ContextBundle): string {
       // Inbound links are spelled out in full rather than mirrored. "manages"
       // read backwards is a different claim about a real person, and there is
       // no arrow convention a reader reliably gets right.
+      const who = r.summary ? ` — ${r.summary}` : ''
       out.push(
         r.direction === 'out'
-          ? `- ${r.relation} → ${r.name}`
-          : `- ${r.name} → ${r.relation} → ${b.subject.name}`,
+          ? `- ${r.relation} → ${r.name}${who}`
+          : `- ${r.name} → ${r.relation} → ${b.subject.name}${who}`,
       )
     }
   }
@@ -573,10 +628,15 @@ export function formatBundle(b: ContextBundle): string {
  * `get_context` call, nobody asked for this lookup and nobody will check it.
  */
 export async function headlineFact(subject: string): Promise<string | null> {
+  return (await headline(subject))?.line ?? null
+}
+
+/** `headlineFact`, plus which entity it resolved to, for callers that need both. */
+export async function headline(subject: string): Promise<{ entityId: string; line: string } | null> {
   const b = await assembleContext(subject, { limit: 1, hops: 0, fuzzy: false })
   if (!b) return null
   const top = b.facts[0] ?? b.anticipations[0]
-  return `${b.subject.name}${top ? ` — ${top.statement}` : ''}`
+  return { entityId: b.subject.id, line: `${b.subject.name}${top ? ` — ${top.statement}` : ''}` }
 }
 
 // ── Episode search ───────────────────────────────────────────────────────────
